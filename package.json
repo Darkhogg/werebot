@@ -1,0 +1,10 @@
+{
+  "name": "werebot",
+  "description": "An IRC bot that allows player to play Werewolf",
+  "version": "0.1.0",
+  "dependencies": {
+    "irc": "^0.3.12",
+    "winston": "^1.0.0",
+    "yargs": "^3.8.0"
+  }
+}
