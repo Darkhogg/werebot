@@ -1,0 +1,7 @@
+{
+    "host": "irc.rizon.net",
+    "nick": "Werebot",
+    "channel": "#werebot",
+    "channelWolves": "#werebot_wolves",
+    "nickservPassword": null
+}
