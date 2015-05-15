@@ -16,10 +16,6 @@ var ROLE_VILLAGER = 'villager';
 var ROLE_WOLF     = 'werewolf';
 
 var Bot = function Bot (opts) {
-    opts.nick = opts.nick || 'Werebot';
-    opts.channel = opts.channel || '#werebot';
-    opts.channelWolves = opts.channelWolves || '#werebot_wolves';
-
     this.options = opts;
 };
 

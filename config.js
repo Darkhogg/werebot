@@ -8,7 +8,7 @@ var config = {};
 
 filenames.forEach(function (filename) {
     if (fs.existsSync(filename)) {
-        objAss(config, fs.readFileSync(filename));
+        objAss(config, JSON.parse(fs.readFileSync(filename)));
     }
 });
 
