@@ -2,10 +2,13 @@
   "name": "werebot",
   "description": "An IRC bot that allows player to play Werewolf",
   "version": "0.1.0",
+  "license": "GPL3",
+  "repository": "https://github.com/Darkhogg/werebot",
   "dependencies": {
     "crashit": "^0.4.1",
     "irc": "^0.3.12",
     "lodash": "^3.8.0",
+    "object-assign": "^2.0.0",
     "winston": "^1.0.0",
     "yargs": "^3.8.0"
   }
