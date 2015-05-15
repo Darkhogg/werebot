@@ -6,20 +6,20 @@ var logger = require('./logger');
 
 var Bot = require('./bot');
 
+crashit.addHook(function (cause) {
+    logger.warn('Crashing:', cause);
+});
+
 crashit.handleSignals(['SIGINT', 'SIGTERM'], true);
 crashit.handleUncaught(true);
 
 var bot = new Bot({
-    'host': config.irc.server,
-    'nick': config.irc.nick,
-    'channel': config.irc.channel,
-    'channelWolves': config.irc.channelWolves,
-    'nickserv': config.nickserv
+    'host': config.host,
+    'nick': config.nick,
+    'channel': config.channel,
+    'channelWolves': config.channelWolves,
+    'nickservPassword': config.nickservPassword
 });
-
-crashit.addHook(function (cause) {
-    logger.warn('Crashing:', cause);
-})
 
 crashit.addHook(function () {
     bot.stop();
