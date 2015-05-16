@@ -4,8 +4,8 @@ var _       = require('lodash');
 var crashit = require('crashit');
 var irc     = require('irc');
 
-var logger = require('./logger');
-var config = require('./config');
+var logger = require('>/common/logger');
+var config = require('>/common/config');
 
 var MIN_PLAYERS = 5;
 
@@ -330,7 +330,9 @@ Bot.prototype.onTick = function () {
     )) {
         this.endDay();
 
-        if (this.game.players.length <= this.game.wolves.length * 2 || this.game.wolves.length == 0) {
+        if (this.game.players.length <= this.game.wolves.length ||
+            this.game.wolves.length == 0
+        ) {
             this.finishGame();
         } else {
             this.beginNight();

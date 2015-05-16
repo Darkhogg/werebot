@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 var crashit = require('crashit');
 
-var config = require('./config');
-var logger = require('./logger');
+var config = require('>/common/config');
+var logger = require('>/common/logger');
 
-var Bot = require('./bot');
+var Bot = require('>/bot');
 
 crashit.addHook(function (cause) {
     logger.warn('Crashing:', cause);
