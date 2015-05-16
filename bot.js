@@ -1,3 +1,5 @@
+'use strict';
+
 var _       = require('lodash');
 var crashit = require('crashit');
 var irc     = require('irc');
@@ -55,6 +57,7 @@ Bot.prototype.start = function start () {
     _this.client.on('notice', _this.onNotice.bind(_this));
     _this.client.on('message', _this.onMessage.bind(_this));
     _this.client.on('command', _this.onCommand.bind(_this));
+    _this.client.on('+mode', _this.onAddMode.bind(_this));
 };
 
 Bot.prototype.stop = function stop () {
@@ -72,16 +75,23 @@ Bot.prototype.recoverNick = function () {
         logger.verbose('Registering with NickServ...');
         this.client.say('NickServ', 'IDENTIFY ' + this.options.nickservPassword);
     }
-}
+};
 
 Bot.prototype.recoverWolvesChannel = function () {
     logger.verbose('Requesting ChanServ an invite to %s', this.options.channelWolves);
     this.client.say('ChanServ', 'INVITE ' + this.options.channelWolves);
-}
+};
+
+Bot.prototype.resetTopic = function () {
+    this.client.send('TOPIC', this.options.channel,
+        '\x0fWelcome to \x02Werebot\x02, a Werewolf playing channel!  |  ' +
+        'To start playing, write \x1f!play\x1f  |  ' +
+        'Please report any problems to https://github.com/Darkhogg/werebot/issues');
+};
 
 Bot.prototype.resetChannel = function () {
-    this.client.send('MODE', this.options.channel, '-m');
-}
+    this.client.send('MODE', this.options.channel, '+t-m');
+};
 
 Bot.prototype.onInvite = function onInvite (channel, from, msg) {
     var _this = this;
@@ -108,6 +118,16 @@ Bot.prototype.onJoin = function onJoin (channel, who, msg) {
 Bot.prototype.onNick = function (oldNick, newNick, channels, msg) {
     logger.silly('[   NICK] %s -> %s', oldNick, newNick, channels);
 };
+
+Bot.prototype.onAddMode = function (channel, by, mode, argument, msg) {
+    if (channel == this.options.channel && argument == this.client.nick) {
+        if (!this.game.playing) {
+            this.resetChannel();
+        }
+
+        this.resetTopic();
+    }
+}
 
 Bot.prototype.onNotice = function onNotice (from, to, text, msg) {
     var _this = this;
@@ -145,18 +165,6 @@ Bot.prototype.onCommand = function onCommand (who, where, command, args) {
     logger.debug('  > %s %s: [%s]', who, where, command.toUpperCase(), args);
 
     switch (command) {
-        /* Show the help */
-        case 'help': {
-
-        } break;
-
-        case 'restart': {
-            crashit.crash(42);
-        } break;
-
-        case 'status': {
-
-        } break;
 
         /* Start a new game */
         case 'p':
@@ -364,7 +372,7 @@ Bot.prototype.finishGame = function () {
         this.client.day(this.options.channel, '\x02\x0303The VILLAGERS win');
     } else {
         this.client.say(this.options.channel, 'Having too few numbers, the werewolves overcome the villagers and kill them all');
-        this.client.day(this.options.channel, '\x02\0304The WEREWOLVES win');
+        this.client.day(this.options.channel, '\x02\x0304The WEREWOLVES win');
     }
 
     this.endGame();

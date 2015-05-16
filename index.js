@@ -13,8 +13,6 @@ crashit.addHook(function (cause) {
 crashit.handleSignals(['SIGINT', 'SIGTERM'], true);
 crashit.handleUncaught(true);
 
-logger.data(config);
-
 var bot = new Bot({
     'host': config.host,
     'nick': config.nick,

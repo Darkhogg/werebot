@@ -2,7 +2,7 @@ var argv   = require('yargs').argv;
 var fs     = require('fs');
 var objAss = require('object-assign');
 
-var filenames = ['./default.json', '/etc/werebot/config.json'];
+var filenames = ['./default.json', 'local.json', '/etc/werebot/config.json'];
 
 var config = {};
 
