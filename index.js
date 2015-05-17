@@ -22,7 +22,7 @@ var bot = new Bot({
 });
 
 crashit.addHook(function () {
-    bot.stop();
+    bot.stop('I\'ll be back...');
 });
 
-bot.start();
+bot.start(require('./package.json').version);

@@ -1,5 +1,4 @@
 'use strict';
-
 var _       = require('lodash');
 var crashit = require('crashit');
 var irc     = require('irc');
@@ -21,7 +20,7 @@ var Bot = function Bot (opts) {
     this.options = opts;
 };
 
-Bot.prototype.start = function start () {
+Bot.prototype.start = function start (version) {
     var _this = this;
 
     _this.names = {};
@@ -30,8 +29,7 @@ Bot.prototype.start = function start () {
         'playing': false
     };
 
-    logger.debug('Starting Bot: %s %s %s %s',
-        _this.options.host, _this.options.nick, _this.options.channel, _this.options.channelWolves);
+    logger.debug('Starting Bot (v%s)', version);
 
     this.client = new irc.Client(
         _this.options.host,
@@ -53,6 +51,7 @@ Bot.prototype.start = function start () {
 
     _this.client.on('invite', _this.onInvite.bind(_this));
     _this.client.on('join', _this.onJoin.bind(_this));
+    _this.client.on('part', _this.onPart.bind(_this));
     _this.client.on('names', _this.onNames.bind(_this));
     _this.client.on('notice', _this.onNotice.bind(_this));
     _this.client.on('message', _this.onMessage.bind(_this));
@@ -60,12 +59,12 @@ Bot.prototype.start = function start () {
     _this.client.on('+mode', _this.onAddMode.bind(_this));
 };
 
-Bot.prototype.stop = function stop () {
+Bot.prototype.stop = function stop (message) {
     logger.debug('Stopping Bot');
 
     this.resetChannel();
 
-    this.client.disconnect();
+    this.client.disconnect(message);
 };
 
 Bot.prototype.recoverNick = function () {
@@ -104,19 +103,33 @@ Bot.prototype.onInvite = function onInvite (channel, from, msg) {
 };
 
 Bot.prototype.onJoin = function onJoin (channel, who, msg) {
-    var _this = this;
-
     logger.silly('[   JOIN] %s %s', who, channel);
 
-    if (!_this.names[channel]) {
-        _this.names[channel] = [];
+    if (!this.names[channel]) {
+        this.names[channel] = [];
     }
 
-    _this.names[channel].push(who);
+    this.names[channel].push(who);
+};
+
+Bot.prototype.onPart = function onJoin (channel, who, msg) {
+    logger.silly('[   PART] %s %s', who, channel);
+
+    if (!this.names[channel]) {
+        this.names[channel] = [];
+    }
+
+    var idx = this.names[channel].indexOf(who);
+    if (idx >= 0) {
+        this.names[channel].splice(idx, 1);
+    }
 };
 
 Bot.prototype.onNick = function (oldNick, newNick, channels, msg) {
     logger.silly('[   NICK] %s -> %s', oldNick, newNick, channels);
+
+    var idx = this.names[channel].indexOf(oldNick);
+    this.names[channel][idx] = newNick;
 };
 
 Bot.prototype.onAddMode = function (channel, by, mode, argument, msg) {
@@ -130,8 +143,6 @@ Bot.prototype.onAddMode = function (channel, by, mode, argument, msg) {
 }
 
 Bot.prototype.onNotice = function onNotice (from, to, text, msg) {
-    var _this = this;
-
     logger.silly('[ NOTICE] %s %s: ', from, to, text);
 };
 
