@@ -15,6 +15,7 @@ crashit.handleUncaught(true);
 
 var bot = new Bot({
     'host': config.host,
+    'port': config.port || 6667,
     'nick': config.nick,
     'channel': config.channel,
     'channelWolves': config.channelWolves,
