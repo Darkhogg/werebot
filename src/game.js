@@ -100,8 +100,9 @@ Game.TIME_LYNCHING   = 150;
 Game.TIME_SHERIFF    = 30;
 
 /* === DEATH TYPES === */
-Game.DEATH_WOLVES = 'wolves';
-Game.DEATH_LYNCH  = 'lynch';
+Game.DEATH_WOLVES     = 'wolves';
+Game.DEATH_LYNCH      = 'lynch';
+Game.DEATH_DISAPPEAR  = 'disappear';
 
 /* === GAME SIDES === */
 Game.SIDE_TOWN   = 'town';
@@ -171,8 +172,30 @@ Game.prototype.checkVictory = function checkVictory () {
 };
 
 Game.prototype.nickChanged = function nickChanged (oldNick, newNick) {
+    /* When a nick changes, we need to:
+       - Change it on the list of players
+       - Change it on its role list
+       - Modify the entry on the roles map
+    */
 
+    if (this.running && this.players.indexOf(oldNick) >= 0) {
+        this.players[this.players.indexOf(oldNick)] = newNick;
+
+        if (this.roles[oldNick]) {
+            var rolePlayersNick = this.rolePlayers[this.roles[oldNick]];
+            rolePlayersNick[rolePlayersNick.indexOf(oldNick)] = newNick;
+
+            this.roles[newNick] = this.roles[oldNick];
+            this.roles[oldNick] = null;
+        }
+    }
 };
+
+Game.prototype.playerLeft = function playerLeft (player) {
+    if (this.running && this.players.indexOf(player) >= 0) {
+        this.addDeath(player, Game.DEATH_DISAPPEAR, false);
+    }
+}
 
 /* ======================= */
 /* === STATE MODIFIERS === */
@@ -320,6 +343,11 @@ Game.prototype.applyDeaths = function applyDeaths () {
 
 Game.prototype.performDeath = function performDeath (death) {
     var player = death.player;
+
+    if (this.players.indexOf(player) < 0) {
+        return;
+    }
+
     var role = this.getPlayerRole(player);
 
     logger.verbose('%s [%s] dies (%s)', player, role, death.reason);

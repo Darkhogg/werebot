@@ -45,6 +45,7 @@ Bot.prototype.start = function start (version) {
 
     this.client.on('invite',  this.onInvite.bind(this));
     this.client.on('join',    this.onJoin.bind(this));
+    this.client.on('quit',    this.onQuit.bind(this));
     this.client.on('part',    this.onPart.bind(this));
     this.client.on('nick',    this.onNick.bind(this));
     this.client.on('names',   this.onNames.bind(this));
@@ -128,7 +129,7 @@ Bot.prototype.onInvite = function onInvite (channel, from, msg) {
 };
 
 Bot.prototype.onJoin = function onJoin (channel, who, msg) {
-    logger.silly('[   JOIN] %s %s', who, channel);
+    logger.silly('[   JOIN] %s @ %s', who, channel);
 
     if (!this.names[channel]) {
         this.names[channel] = [];
@@ -138,7 +139,7 @@ Bot.prototype.onJoin = function onJoin (channel, who, msg) {
 };
 
 Bot.prototype.onPart = function onJoin (channel, who, msg) {
-    logger.silly('[   PART] %s %s', who, channel);
+    logger.silly('[   PART] %s @ %s', who, channel);
 
     if (!this.names[channel]) {
         this.names[channel] = [];
@@ -148,6 +149,27 @@ Bot.prototype.onPart = function onJoin (channel, who, msg) {
     if (idx >= 0) {
         this.names[channel].splice(idx, 1);
     }
+
+    this.game.playerLeft(who);
+};
+
+Bot.prototype.onQuit = function onJoin (who, reason, channels, msg) {
+    var _this = this;
+
+    logger.silly('[   QUIT] %s "%s" [%s]', who, reason, channels.join(','));
+
+    channels.forEach(function (channel) {
+        if (!_this.names[channel]) {
+            _this.names[channel] = [];
+        }
+
+        var idx = _this.names[channel].indexOf(who);
+        if (idx >= 0) {
+            _this.names[channel].splice(idx, 1);
+        }
+    });
+
+    this.game.playerLeft(who);
 };
 
 Bot.prototype.onNick = function (oldNick, newNick, channels, msg) {
@@ -403,7 +425,7 @@ Bot.prototype.onGameStartTurnDiscussion = function onGameStartTurnDiscussion () 
 
     this.client.say(this.options.channel, 'Everyone on ' + this.game.townName + ' gathers at the plaza');
     this.client.say(this.options.channel,
-        '\x0304There are still \x02' + numWolves + ' werewolve' + (numWolves > 1 ? 's' : '') + '\x0f');
+        '\x0304\x02' + numWolves + ' werewolve' + (numWolves > 1 ? 's\x02 are ' : '\x02 is ') + 'still alive\x0f');
     this.client.say(this.options.channel, 'It\'s time to find out who is a werewolf: discuss!');
 }
 
@@ -427,9 +449,14 @@ Bot.prototype.onGameDeath = function (player, role, reason) {
         + '\x02' + player + '\x02, the \x02' + role + '\x02, ';
 
     switch (reason) {
+        case Game.DEATH_DISAPPEAR: {
+            this.client.say(this.options.channel,
+                prefix + 'has gone missing');
+        } break;
+
         case Game.DEATH_WOLVES: {
             this.client.say(this.options.channel,
-                prefix + 'has been found defigured by the werewolves!');
+                prefix + 'has been found killed by the werewolves!');
         } break;
 
         case Game.DEATH_LYNCH: {
