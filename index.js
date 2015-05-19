@@ -17,8 +17,9 @@ var bot = new Bot({
     'host': config.host,
     'port': config.port || 6667,
     'nick': config.nick,
-    'channel': config.channel,
+    'channel': config.channelGame,
     'channelWolves': config.channelWolves,
+    'channelTalk': config.channelTalk,
     'nickservPassword': config.nickservPassword
 });
 

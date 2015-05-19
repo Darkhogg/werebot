@@ -88,15 +88,15 @@ Game.TURN_LYNCHING   = 'lynching';
 Game.TURN_SHERIFF    = 'sheriff';
 
 /* === TURN DURATIONS === */
-Game.TIME_JOINING    = 15//60;
+Game.TIME_JOINING    = 60;
 Game.TIME_ELECTION   = 150;
 Game.TIME_CONCUBINE  = 45;
-Game.TIME_WOLVES     = 15//60;
+Game.TIME_WOLVES     = 60;
 Game.TIME_SEER       = 60;
 Game.TIME_WITCH      = 30;
 Game.TIME_HUNTER     = 30;
-Game.TIME_DISCUSSION = 15//45;
-Game.TIME_LYNCHING   = 30//90;
+Game.TIME_DISCUSSION = 60;
+Game.TIME_LYNCHING   = 150;
 Game.TIME_SHERIFF    = 30;
 
 /* === DEATH TYPES === */
@@ -151,7 +151,7 @@ Game.prototype.getRolePlayers = function getRolePlayers (role) {
 
 Game.prototype.countRolePlayers = function countRolePlayers (role) {
     return this.getRolePlayers(role).length;
-}
+};
 
 Game.prototype.checkVictory = function checkVictory () {
     if (this.winningSide) {
@@ -168,7 +168,11 @@ Game.prototype.checkVictory = function checkVictory () {
     }
 
     return false;
-}
+};
+
+Game.prototype.nickChanged = function nickChanged (oldNick, newNick) {
+
+};
 
 /* ======================= */
 /* === STATE MODIFIERS === */
@@ -247,7 +251,7 @@ Game.prototype.assignRoles = function assignRoles () {
     var roles = []; // TODO
 
     /* Find out how many wolves */
-    var numWolves = Math.max(1, (this.players.length - 1) / 5);
+    var numWolves = Math.floor(Math.max(1, (this.players.length + 4) / 5));
 
     /* Fill the remaining with villagers, with a minimum (numWolves+1) willagers */
     var numVillagers = 1 + Math.max(numWolves, this.players.length - roles.length - numWolves);
@@ -286,7 +290,7 @@ Game.prototype.assignRoles = function assignRoles () {
 };
 
 Game.prototype.addDeath = function addDeath (who, why, direct) {
-    logger.verbose('Player "%s" added to death queue:', who, why);
+    logger.verbose('Death: %s %s', who, why);
 
     var death = {
         'player': who,
@@ -299,7 +303,7 @@ Game.prototype.addDeath = function addDeath (who, why, direct) {
         this.deaths.push(death);
     }
 
-    logger.verbose('Death queue:', this.deaths);
+    logger.verbose('Death queue: [%s]', this.deaths.join(', '));
 };
 
 Game.prototype.applyDeaths = function applyDeaths () {
@@ -318,7 +322,7 @@ Game.prototype.performDeath = function performDeath (death) {
     var player = death.player;
     var role = this.getPlayerRole(player);
 
-    logger.verbose('%s (%s) is going to die', player, role);
+    logger.verbose('%s [%s] dies (%s)', player, role, death.reason);
 
     /* Remove the player from the role and player lists */
     this.players.splice(this.players.indexOf(player), 1);
@@ -390,6 +394,10 @@ Game.prototype.onStartPhaseDay = function onStartPhaseDay () {
 };
 
 Game.prototype.onEndPhaseDay = function onStartPhaseDay () {
+    if (this.lynchVictim) {
+        this.addDeath(this.lynchVictim, Game.DEATH_LYNCH, true);
+    }
+
     if (this.checkVictory()) {
         this.endGame();
 
@@ -440,15 +448,12 @@ Game.prototype.onStartTurnLynching = function onStartTurnLynching () {
     this.lynchVictim = null;
     this.lynchVictims = {};
     this.lynchVoted = {};
+    this.lynchTotalVotes = 0;
 };
 
 Game.prototype.onEndTurnLynching = function onEndTurnLynching () {
-    /* Select the victim from the wolf votes */
+    /* Select the victim from the lynch votes */
     this.lynchVictim = utils.mostVoted(this.lynchVictims);
-
-    if (this.lynchVictim) {
-        this.addDeath(this.lynchVictim, Game.DEATH_LYNCH, true);
-    }
 };
 
 
@@ -560,6 +565,8 @@ Game.prototype.lynch = function (name, targetName) {
 
     logger.verbose('LYNCH("%s")', name, target);
 
+    this.lynchTotalVotes ++;
+
     /* Create a vote entry if not present (and not blank) */
     if (target != BLANK && !this.killVictims[target]) {
         this.lynchVictims[target] = 0;
@@ -572,6 +579,11 @@ Game.prototype.lynch = function (name, targetName) {
     }
 
     this._emit('vote', player, target);
+
+    /* If everyone has voted, end the turn */
+    if (this.lynchTotalVotes >= this.players.length) {
+        this.endTurn(Game.TURN_LYNCHING);
+    }
 };
 
 /* ====================== */

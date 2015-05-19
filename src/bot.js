@@ -10,14 +10,6 @@ var Game = require('>/game');
 
 var MIN_PLAYERS = 5;
 
-var TIME_JOIN    =  60;
-var TIME_PREPARE =   1;
-var TIME_NIGHT   =  90;
-var TIME_DAY     = 180;
-
-var ROLE_VILLAGER = 'villager';
-var ROLE_WOLF     = 'werewolf';
-
 var Bot = function Bot (opts) {
     this.options = opts;
 };
@@ -54,6 +46,7 @@ Bot.prototype.start = function start (version) {
     this.client.on('invite',  this.onInvite.bind(this));
     this.client.on('join',    this.onJoin.bind(this));
     this.client.on('part',    this.onPart.bind(this));
+    this.client.on('nick',    this.onNick.bind(this));
     this.client.on('names',   this.onNames.bind(this));
     this.client.on('notice',  this.onNotice.bind(this));
     this.client.on('message', this.onMessage.bind(this));
@@ -119,13 +112,6 @@ Bot.prototype.recoverWolvesChannel = function () {
     this.client.say('ChanServ', 'INVITE ' + this.options.channelWolves);
 };
 
-Bot.prototype.resetTopic = function () {
-    this.client.send('TOPIC', this.options.channel,
-        '\x0fWelcome to \x02Werebot\x02, a Werewolf playing channel!  |  ' +
-        'To start playing, write \x1f!play\x1f  |  ' +
-        'Please report any problems to https://github.com/Darkhogg/werebot/issues');
-};
-
 Bot.prototype.resetChannel = function () {
     this.client.send('MODE', this.options.channel, '+t-m');
     this.client.say('ChanServ', 'SYNC ' + this.options.channel);
@@ -165,19 +151,29 @@ Bot.prototype.onPart = function onJoin (channel, who, msg) {
 };
 
 Bot.prototype.onNick = function (oldNick, newNick, channels, msg) {
-    logger.silly('[   NICK] %s -> %s', oldNick, newNick, channels);
+    var _this = this;
 
-    var idx = this.names[channel].indexOf(oldNick);
-    this.names[channel][idx] = newNick;
+    logger.silly('[   NICK] %s -> %s ["%s"]', oldNick, newNick, channels.join('","'));
+
+    channels.forEach(function (channel) {
+        if (_this.names[channel]) {
+            var idx = _this.names[channel].indexOf(oldNick);
+            _this.names[channel][idx] = newNick;
+        }
+    });
+
+    this.game.nickChanged(oldNick, newNick);
 };
 
 Bot.prototype.onAddMode = function (channel, by, mode, argument, msg) {
+    if (this.game.playing && 'vho'.indexOf(mode) >= 0) {
+        this.client.send('MODE', channel, '-' + mode, argument);
+    }
+
     if (channel == this.options.channel && argument == this.client.nick) {
         if (!this.game.playing) {
             this.resetChannel();
         }
-
-        this.resetTopic();
     }
 }
 
@@ -324,7 +320,8 @@ Bot.prototype.onGameEndPhaseNight = function onGameEndPhaseNight () {
 
 
 Bot.prototype.onGameStartPhaseDay = function onGameStartPhaseDay () {
-    this.client.say(this.options.channel, 'A new \x02\x0310day\x0f begins in ' + this.game.townName + ' and everyone wakes up.');
+    this.client.say(this.options.channel,
+        'A new \x02\x0310day\x0f begins in ' + this.game.townName + ' and everyone wakes up.');
 };
 
 Bot.prototype.onGameEndPhaseDay = function onGameEndPhaseDay () {
@@ -378,7 +375,13 @@ Bot.prototype.onAssignedRoles = function onAssignedRoles () {
 
 
 Bot.prototype.onGameStartTurnWolves = function onGameStartTurnWolves () {
+    var _this = this;
 
+    this.game.getRolePlayers(Game.ROLE_WOLF).forEach(function (wolf) {
+        _this.client.notice(wolf, 'It\'s time to hunt! Join ' + _this.options.channelWolves + ' to discuss who to kill with the other werewolves');
+        _this.client.notice(wolf, 'When you\'re ready, vote for killing by saying \x1f!kill nick\x1f, or \x1f!kill -\x1f to skip vote');
+        _this.client.notice(wolf, 'The decision should be unanimous.  Remember that you can change your vote!');
+    });
 };
 
 Bot.prototype.onGameEndTurnWolves = function onGameEndTurnWolves () {
@@ -396,7 +399,11 @@ Bot.prototype.onGameStartTurnDiscussion = function onGameStartTurnDiscussion () 
         }
     });
 
+    var numWolves =  this.game.getRolePlayers(Game.ROLE_WOLF).length;
+
     this.client.say(this.options.channel, 'Everyone on ' + this.game.townName + ' gathers at the plaza');
+    this.client.say(this.options.channel,
+        '\x0304There are still \x02' + numWolves + ' werewolve' + (numWolves > 1 ? 's' : '') + '\x0f');
     this.client.say(this.options.channel, 'It\'s time to find out who is a werewolf: discuss!');
 }
 
