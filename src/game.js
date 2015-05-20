@@ -7,7 +7,6 @@ var logger = require('>/common/logger');
 var config = require('>/common/config');
 var utils  = require('>/common/utils');
 
-var MIN_PLAYERS = 5;
 var BLANK = '-';
 
 var Game = function Game () {
@@ -59,6 +58,8 @@ Game.prototype._emit = function emit () {
         _this.emit.apply(_this, args);
     });
 };
+
+Game.MIN_PLAYERS = 5;
 
 /* === PLAYER ROLES === */
 Game.ROLE_VILLAGER = 'villager';
@@ -216,6 +217,7 @@ Game.prototype.startGame = function startGame () {
 
     this.townName = utils.generateTownName();
     this.winningSide = null;
+    this.assignedRoles = false;
 
     this.deaths = [];
     this.players = [];
@@ -277,6 +279,8 @@ Game.prototype.endTurn = function endTurn (turn) {
 };
 
 Game.prototype.assignRoles = function assignRoles () {
+    this.assignedRoles = true;
+
     this.rolePlayers = {};
     this.roles = {};
 
@@ -402,7 +406,9 @@ Game.prototype.onStartPhasePreparation = function onStartPhasePreparation () {
 };
 
 Game.prototype.onEndPhasePreparation = function onEndPhasePreparation () {
-    this.startPhase(Game.PHASE_NIGHTTIME);
+    if (this.players >= Game.MIN_PLAYERS) {
+        this.startPhase(Game.PHASE_NIGHTTIME);
+    }
 };
 
 
@@ -451,7 +457,9 @@ Game.prototype.onStartTurnJoining = function onStartTurnJoining () {
 };
 
 Game.prototype.onEndTurnJoining = function onEndTurnJoining () {
-    this.assignRoles();
+    if (this.players.length >= Game.MIN_PLAYERS) {
+        this.assignRoles();
+    }
 };
 
 

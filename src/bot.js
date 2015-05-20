@@ -324,10 +324,9 @@ Bot.prototype.onGameStartGame = function onGameStartGame () {
 };
 
 Bot.prototype.onGameEndGame = function onGameEndGame () {
-    this.client.say(this.options.channel,
-        'The game has ended');
+    if (this.game.assignedRoles) {
+        this.client.say(this.options.channel, 'The game has ended');
 
-    if (this.game.winningSide) {
         switch (this.game.winningSide) {
             case Game.SIDE_TOWN: {
                 this.client.say(this.options.channel,
@@ -338,7 +337,17 @@ Bot.prototype.onGameEndGame = function onGameEndGame () {
                 this.client.say(this.options.channel,
                     '\x0304The \x02werewolves\x02 have won by killing all humans!');
             } break;
+
+            default: {
+                this.client.say(this.options.channel,
+                    '\x0314\x02Nobody\x02 has won the game');
+            }
         }
+
+    } else {
+        this.client.say(this.options.channel,
+            sprintf('A minimum of \x02%s\x02 players are required to start a game', Game.MIN_PLAYERS)
+        );
     }
 
     this.resetChannel();
