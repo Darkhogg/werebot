@@ -28,3 +28,27 @@ module.exports.mostVoted = function mostVoted (votes) {
 
     return winner;
 }
+
+module.exports.joinWithMax = function joinWithMax (array, glue, linesize) {
+    var pieces = [];
+    var line = '';
+
+    for (var i = 0; i < array.length; i++) {
+        if (line) {
+            line += glue;
+        }
+
+        line += array[i];
+
+        if (line.length >= linesize) {
+            pieces.push(line);
+            line = '';
+        }
+    }
+
+    if (line) {
+        pieces.push(line);
+    }
+
+    return pieces;
+}

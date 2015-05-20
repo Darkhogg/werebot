@@ -128,6 +128,10 @@ Game.prototype.isTurn = function isTurn (turn) {
     return this.activeTurns && this.activeTurns.indexOf(turn) >= 0;
 };
 
+Game.prototype.isPhase = function isPhase (phase) {
+    return this.phase && this.phase == phase;
+};
+
 Game.prototype.getPlayerRole = function getPlayerRole (name) {
     var player = this.findPlayer(name);
 
@@ -193,7 +197,13 @@ Game.prototype.nickChanged = function nickChanged (oldNick, newNick) {
 
 Game.prototype.playerLeft = function playerLeft (player) {
     if (this.running && this.players.indexOf(player) >= 0) {
-        this.addDeath(player, Game.DEATH_DISAPPEAR, false);
+        if (this.isTurn(Game.TURN_JOINING)) {
+            this.players.splice(this.players.indexOf(player));
+
+            this._emit('leave', player, this.players.length);
+        } else {
+            this.addDeath(player, Game.DEATH_DISAPPEAR, this.isPhase(Game.PHASE_DAYTIME));
+        }
     }
 }
 
@@ -397,6 +407,8 @@ Game.prototype.onEndPhasePreparation = function onEndPhasePreparation () {
 
 
 Game.prototype.onStartPhaseNight = function onStartPhaseNight () {
+    this.applyDeaths();
+
     this.startTurn(Game.TURN_WOLVES, Game.TIME_WOLVES);
 
     if (this.countRolePlayers(Game.ROLE_SEER) > 0) {
@@ -447,6 +459,7 @@ Game.prototype.onStartTurnWolves = function onStartTurnWolves () {
     this.wolvesVictim = null;
     this.killVictims = {};
     this.killVoted = {};
+    this.totalKillVoted = [];
 };
 
 Game.prototype.onEndTurnWolves = function onEndTurnWolves () {
@@ -540,32 +553,56 @@ Game.prototype.kill = function kill (name, victimName) {
 
     var victim = this.findPlayer(victimName);
 
-    if (!victim) {
+    if (!victim && victimName != BLANK) {
         throw new GameError('kill_victim_not_playing');
+    }
+
+    if (this.getPlayerRole(victim) == Game.ROLE_WOLF) {
+        throw new GameError('kill_victim_wolf');
     }
 
     /* --- Everything OK --- */
 
     logger.verbose('KILL("%s")', name, victim);
 
+    /* Add the player to the list of who voted */
+    if (this.totalKillVoted.indexOf(player) < 0) {
+        this.totalKillVoted.push(player);
+    }
+
     /* Create a vote entry if not present (and not blank) */
-    if (victim != BLANK && !this.killVictims[victim]) {
+    if (victimName != BLANK && !this.killVictims[victim]) {
         this.killVictims[victim] = 0;
     }
 
+    var oldVictim = null;
+
     /* If there was already a vote from this wolf, remove it */
     if (this.killVoted[player]) {
-        this.killVictims[victim]--;
+        oldVictim = this.killVoted[player];
+
+        this.killVictims[oldVictim]--;
         this.killVoted[player] = undefined;
     }
 
     /* If the current vote was not blank, add it */
-    if (victim != BLANK) {
+    if (victimName != BLANK) {
         this.killVictims[victim]++;
         this.killVoted[player] = victim;
     }
 
-    this._emit('kill', player, victim);
+    console.log(this.totalKillVoted);
+    console.log(this.killVictims);
+
+    this._emit('kill', player, victim, oldVictim);
+
+    /* If everyone has voted and there is majority, end the turn */
+    if (
+        this.totalKillVoted.length >= this.getRolePlayers(Game.ROLE_WOLF).length &&
+        utils.mostVoted(this.killVictims)
+    ) {
+        this.endTurn(Game.TURN_WOLVES);
+    }
 };
 
 Game.prototype.lynch = function (name, targetName) {
@@ -585,7 +622,7 @@ Game.prototype.lynch = function (name, targetName) {
 
     var target = this.findPlayer(targetName);
 
-    if (!target) {
+    if (!target && targetName != BLANK) {
         throw new GameError('lynch_target_not_playing');
     }
 
@@ -596,12 +633,12 @@ Game.prototype.lynch = function (name, targetName) {
     this.lynchTotalVotes ++;
 
     /* Create a vote entry if not present (and not blank) */
-    if (target != BLANK && !this.killVictims[target]) {
+    if (target && !this.killVictims[target]) {
         this.lynchVictims[target] = 0;
     }
 
     /* If the current vote was not blank, add it */
-    if (target != BLANK) {
+    if (target) {
         this.lynchVictims[target]++;
         this.lynchVoted[player] = target;
     }

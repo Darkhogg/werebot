@@ -1,7 +1,7 @@
 {
   "name": "werebot",
   "description": "An IRC bot that allows player to play Werewolf",
-  "version": "0.3.0",
+  "version": "1.0-beta",
   "license": "GPL-3.0",
   "repository": "https://github.com/Darkhogg/werebot",
   "scripts": {
@@ -15,6 +15,7 @@
     "irc": "^0.3.12",
     "lodash": "^3.8.0",
     "object-assign": "^2.0.0",
+    "sprintf-js": "^1.0.2",
     "winston": "^1.0.0",
     "yargs": "^3.8.0"
   }

@@ -2,13 +2,24 @@
 var _       = require('lodash');
 var crashit = require('crashit');
 var irc     = require('irc');
+var sprintf = require('sprintf-js').sprintf;
 
 var logger = require('>/common/logger');
 var config = require('>/common/config');
+var utils  = require('>/common/utils');
 
 var Game = require('>/game');
 
 var MIN_PLAYERS = 5;
+
+var aliases = {
+    'p': 'play',
+    'j': 'join',
+    'k': 'kill',
+    'v': 'vote',
+
+    'rev': 'revenge',
+}
 
 var Bot = function Bot (opts) {
     this.options = opts;
@@ -53,6 +64,7 @@ Bot.prototype.start = function start (version) {
     this.client.on('message', this.onMessage.bind(this));
     this.client.on('command', this.onCommand.bind(this));
     this.client.on('+mode',   this.onAddMode.bind(this));
+    this.client.on('-mode',   this.onSubMode.bind(this));
 
     this.game = new Game();
 
@@ -82,11 +94,12 @@ Bot.prototype.start = function start (version) {
     this.game.on('start-turn:' + Game.TURN_LYNCHING, this.onGameStartTurnLynching, this);
     this.game.on(  'end-turn:' + Game.TURN_LYNCHING, this.onGameEndTurnLynching, this);
 
-    this.game.on('roles', this.onAssignedRoles, this);
+    this.game.on('roles', this.onGameAssignedRoles, this);
 
     this.game.on('death', this.onGameDeath, this);
 
     this.game.on('join', this.onGameJoin, this);
+    this.game.on('leave', this.onGameLeave, this);
     this.game.on('kill', this.onGameKill, this);
     this.game.on('vote', this.onGameVote, this);
 };
@@ -150,7 +163,9 @@ Bot.prototype.onPart = function onJoin (channel, who, msg) {
         this.names[channel].splice(idx, 1);
     }
 
-    this.game.playerLeft(who);
+    if (channel == this.options.channel) {
+        this.game.playerLeft(who);
+    }
 };
 
 Bot.prototype.onQuit = function onJoin (who, reason, channels, msg) {
@@ -188,15 +203,29 @@ Bot.prototype.onNick = function (oldNick, newNick, channels, msg) {
 };
 
 Bot.prototype.onAddMode = function (channel, by, mode, argument, msg) {
-    if (this.game.playing && 'vho'.indexOf(mode) >= 0) {
+    logger.silly('[  +MODE] %s sets %s +%s', by, channel, mode, argument);
+
+    if (
+        this.game.running &&
+        argument != this.client.nick &&
+        (
+            'ho'.indexOf(mode) >= 0 ||
+            (mode == 'v' && !this.game.isPhase(Game.PHASE_DAYTIME)) ||
+            channel == this.options.channelWolves
+        )
+    ) {
         this.client.send('MODE', channel, '-' + mode, argument);
     }
 
     if (channel == this.options.channel && argument == this.client.nick) {
-        if (!this.game.playing) {
+        if (!this.game.running) {
             this.resetChannel();
         }
     }
+}
+
+Bot.prototype.onSubMode = function (channel, by, mode, argument, msg) {
+    logger.silly('[  -MODE] %s sets %s -%s', by, channel, mode, argument);
 }
 
 Bot.prototype.onNotice = function onNotice (from, to, text, msg) {
@@ -220,6 +249,10 @@ Bot.prototype.onMessage = function onMessage (from, to, text, msg) {
         var cmd = parts[0];
         var args = parts.slice(1);
 
+        if (aliases[cmd]) {
+            cmd = aliases[cmd];
+        }
+
         _this.client.emit('command',
             from,
             to.indexOf('#') == 0 ? to : from,
@@ -235,24 +268,20 @@ Bot.prototype.onCommand = function onCommand (who, where, command, args) {
     try {
         switch (command) {
             /* Start a new game */
-            case 'p':
             case 'play': {
                 this.game.play(who);
             } break;
 
             /* Join a game */
-            case 'j':
             case 'join': {
                 this.game.join(who);
             } break;
 
             /* Kill a player */
-            case 'k':
             case 'kill': {
                 this.game.kill(who, args[0]);
             } break;
 
-            case 'v':
             case 'vote': {
                 this.game.lynch(who, args[0]);
             } break;
@@ -326,7 +355,7 @@ Bot.prototype.onGameEndPhasePreparation = function onGameEndPhasePreparation () 
 Bot.prototype.onGameStartPhaseNight = function onGameStartPhaseNight () {
     var _this = this;
 
-    this.client.say(this.options.channel, 'The \x02\x0302night\x0f falls over ' + this.game.townName + ' and everyone goes to sleep.');
+    this.client.say(this.options.channel, 'The \x02\x0312night\x0f falls over ' + this.game.townName + ' and everyone goes to sleep.');
 
     this.names[this.options.channel].forEach(function (user) {
         if (user != _this.client.nick) {
@@ -343,7 +372,7 @@ Bot.prototype.onGameEndPhaseNight = function onGameEndPhaseNight () {
 
 Bot.prototype.onGameStartPhaseDay = function onGameStartPhaseDay () {
     this.client.say(this.options.channel,
-        'A new \x02\x0310day\x0f begins in ' + this.game.townName + ' and everyone wakes up.');
+        'A new \x02\x0307day\x0f begins in ' + this.game.townName + ' and everyone wakes up.');
 };
 
 Bot.prototype.onGameEndPhaseDay = function onGameEndPhaseDay () {
@@ -362,7 +391,7 @@ Bot.prototype.onGameEndTurnJoining = function onGameEndTurnJoining () {
     this.client.say(this.options.channel, '\x02Time\'s up!');
 };
 
-Bot.prototype.onAssignedRoles = function onAssignedRoles () {
+Bot.prototype.onGameAssignedRoles = function onGameAssignedRoles () {
     var _this = this;
 
     /* Add invite-only and secret flags to wolves channel */
@@ -375,13 +404,20 @@ Bot.prototype.onAssignedRoles = function onAssignedRoles () {
         }
     });
 
+
     /* Inform everyone of the roles of the town */
     this.client.say(this.options.channel,
-        'The town of \x02' + this.game.townName + '\x02 has \x02' + this.game.players.length + '\x02 inhabitants');
+        'The town of \x02' + this.game.townName + '\x02 has \x02' + this.game.players.length + '\x02 inhabitants:');
 
+    /* Inform of every player */
+    utils.joinWithMax(this.game.players, '\x02, \x02', 80).forEach(function (line) {
+        _this.client.say(_this.options.channel, '\x02' + line + '\x02');
+    });
+
+    /* Announce the role of the players */
     _.forEach(this.game.rolePlayers, function (players, role) {
         _this.client.say(_this.options.channel,
-            ' - \x1f' + role + '\x1f: \x02' + players.length + '\x02 ' + (players.length > 1 ? 'people' : 'person'));
+            '- \x1f' + role + '\x1f: \x02' + players.length + '\x02 ' + (players.length > 1 ? 'people' : 'person'));
     });
 
     _.forEach(this.game.roles, function (role, player) {
@@ -389,8 +425,6 @@ Bot.prototype.onAssignedRoles = function onAssignedRoles () {
 
         if (role == Game.ROLE_WOLF) {
             _this.client.notice(player, 'The werewolves are: \x02' + _this.game.getRolePlayers(Game.ROLE_WOLF).join('\x02, \x02'));
-            _this.client.send('INVITE', player, _this.options.channelWolves);
-            _this.client.notice(player, 'Join \x1f' + _this.options.channelWolves + '\x1f to talk to the other werewolves during the night');
         }
     });
 };
@@ -400,9 +434,11 @@ Bot.prototype.onGameStartTurnWolves = function onGameStartTurnWolves () {
     var _this = this;
 
     this.game.getRolePlayers(Game.ROLE_WOLF).forEach(function (wolf) {
-        _this.client.notice(wolf, 'It\'s time to hunt! Join ' + _this.options.channelWolves + ' to discuss who to kill with the other werewolves');
+        _this.client.send('INVITE', wolf, _this.options.channelWolves);
+        _this.client.notice(wolf, 'It\'s time to hunt! Join \x1f' + _this.options.channelWolves + '\x1f to discuss who to kill with the other werewolves');
+
         _this.client.notice(wolf, 'When you\'re ready, vote for killing by saying \x1f!kill nick\x1f, or \x1f!kill -\x1f to skip vote');
-        _this.client.notice(wolf, 'The decision should be unanimous.  Remember that you can change your vote!');
+        _this.client.notice(wolf, 'If a tie is reached, a random player from the tie will die!');
     });
 };
 
@@ -425,7 +461,7 @@ Bot.prototype.onGameStartTurnDiscussion = function onGameStartTurnDiscussion () 
 
     this.client.say(this.options.channel, 'Everyone on ' + this.game.townName + ' gathers at the plaza');
     this.client.say(this.options.channel,
-        '\x0304\x02' + numWolves + ' werewolve' + (numWolves > 1 ? 's\x02 are ' : '\x02 is ') + 'still alive\x0f');
+        '\x0305\x02' + numWolves + ' werewolve' + (numWolves > 1 ? 's\x02 are ' : '\x02 is ') + 'still alive\x0f');
     this.client.say(this.options.channel, 'It\'s time to find out who is a werewolf: discuss!');
 }
 
@@ -435,7 +471,6 @@ Bot.prototype.onGameEndTurnDiscussion = function onGameEndTurnDiscussion () {
 
 
 Bot.prototype.onGameStartTurnLynching = function onGameStartTurnLynching () {
-    this.client.say(this.options.channel, 'Everyone is angry and want to see people dying, it\'s time for the lynching');
     this.client.say(this.options.channel, 'Choose who should be lynched: say \x1f!vote \x1dnick\x1d\x1f, say \x1f!vote -\x1f to skip vote');
     this.client.say(this.options.channel, 'You have \x02' + Game.TIME_LYNCHING + '\x02 seconds to vote');
 };
@@ -456,7 +491,7 @@ Bot.prototype.onGameDeath = function (player, role, reason) {
 
         case Game.DEATH_WOLVES: {
             this.client.say(this.options.channel,
-                prefix + 'has been found killed by the werewolves!');
+                prefix + 'has been found dead, killed by the werewolves!');
         } break;
 
         case Game.DEATH_LYNCH: {
@@ -473,21 +508,63 @@ Bot.prototype.onGameDeath = function (player, role, reason) {
 
 Bot.prototype.onGameJoin = function onGameJoin (player, numPlayers) {
     this.client.say(this.options.channel,
-        '\x02' + player + '\x02 joins the game!');
+        '\x02' + player + '\x02 joins the game!  (\x02' + numPlayers + '\x02 player' + (numPlayers != 1 ? 's are ' : ' is ') + 'already in)');
 };
 
-Bot.prototype.onGameKill = function onGameKill (player, victim) {
+Bot.prototype.onGameLeave = function onGameLeave (player, numPlayers) {
+    this.client.say(this.options.channel,
+        '\x02' + player + '\x02 left the game.  (\x02' + numPlayers + '\x02 player' + (numPlayers != 1 ? 's are ' : ' is ') + 'still in)');
+};
+
+Bot.prototype.onGameKill = function onGameKill (player, victim, oldVictim) {
     var _this = this;
 
-    this.game.rolePlayers[Game.ROLE_WOLF].forEach(function (wolf) {
-        _this.client.notice(wolf,
-            '\x02' + player + '\x02 wants to kill \x02\x1f' + victim + '\x1f\x02');
+    var msg = [
+        '\x02%1$s\x02 doesn\'t want to kill anyone', // null, null
+        '\x02%1$s\x02 wants to kill \x02\x1f%2$s\x1f\x02', // "str", null
+        '\x02%1$s\x02 doesn\'t want to kill \x1f%3$s\x1f anymore', // null, "str"
+        '\x02%1$s\x02 wants to kill \x02\x1f%2$s\x1f\x02 instead of \x1f%3$s\x1f', // "str", "str"
+    ][(+!!victim) + (+!!oldVictim)*2];
+
+
+    var pieces = ['Votes:'];
+
+    _.forEach(this.game.killVictims, function (votes, votedPlayer) {
+        pieces.push(sprintf('\x0305\x1f%s\x1f: \x02%d\x02\x0f', votedPlayer, votes));
     });
+
+    var joinedPieces = utils.joinWithMax(pieces, '   ', 80);
+
+    this.game.getRolePlayers(Game.ROLE_WOLF).forEach(function (wolf) {
+        _this.client.notice(wolf, sprintf(msg, player, victim, oldVictim));
+
+        joinedPieces.forEach(function (line) {
+            _this.client.notice(wolf, line);
+        });
+    });
+
 };
 
 Bot.prototype.onGameVote = function onGameVote (player, target) {
-    this.client.say(this.options.channel,
-        '\x02' + player + '\x02 wants to lynch \x02\x1f' + target + '\x1f\x02');
+    var _this = this;
+
+    if (target) {
+        this.client.say(this.options.channel,
+            '\x02' + player + '\x02 wants to lynch \x02\x1f' + target + '\x1f\x02');
+    } else {
+        this.client.say(this.options.channel,
+            '\x02' + player + '\x02 doesn\'t want to lynch anyone');
+    }
+
+    var pieces = ['Votes:'];
+
+    _.forEach(this.game.lynchVictims, function (votes, votedPlayer) {
+        pieces.push(sprintf('\x0302\x1f%s\x1f: \x02%d\x02\x0f', votedPlayer, votes));
+    });
+
+    utils.joinWithMax(pieces, '   ', 80).forEach(function (line) {
+        _this.client.say(_this.options.channel, line);
+    });
 };
 
 
