@@ -463,10 +463,17 @@ Game.prototype.onStartTurnWolves = function onStartTurnWolves () {
 };
 
 Game.prototype.onEndTurnWolves = function onEndTurnWolves () {
-    /* Select the victim from the wolf votes */
-    this.wolvesVictim = utils.mostVoted(this.killVictims);
+    var _this = this;
 
-    if (this.wolvesVictim) {
+    var victims = utils.mostVotedMulti(this.killVictims);
+    if (victims.length == 0) {
+        victims = this.players.filter(function (player) {
+            return _this.getRolePlayers(Game.ROLE_WOLF).indexOf(player) < 0;
+        });
+    }
+
+    if (victims.length > 0) {
+        this.wolvesVictim = _.shuffle(victims)[0];
         this.addDeath(this.wolvesVictim, Game.DEATH_WOLVES);
     }
 

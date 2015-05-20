@@ -2,7 +2,7 @@
     "host": "localhost",
     "port": null,
     "nick": "Werebot",
-    "channel": "#werebot",
+    "channelGame": "#werebot",
     "channelWolves": "#werebot_wolves",
     "nickservPassword": null
 }

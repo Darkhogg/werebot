@@ -15,6 +15,8 @@ var MIN_PLAYERS = 5;
 var aliases = {
     'p': 'play',
     'j': 'join',
+    'w': 'who',
+
     'k': 'kill',
     'v': 'vote',
 
@@ -203,9 +205,10 @@ Bot.prototype.onNick = function (oldNick, newNick, channels, msg) {
 };
 
 Bot.prototype.onAddMode = function (channel, by, mode, argument, msg) {
-    logger.silly('[  +MODE] %s sets %s +%s', by, channel, mode, argument);
+    logger.silly('[  +MODE] %s sets %s +%s', by, channel, mode, argument || '');
 
     if (
+        argument &&
         this.game.running &&
         argument != this.client.nick &&
         (
@@ -217,7 +220,7 @@ Bot.prototype.onAddMode = function (channel, by, mode, argument, msg) {
         this.client.send('MODE', channel, '-' + mode, argument);
     }
 
-    if (channel == this.options.channel && argument == this.client.nick) {
+    if (argument && channel == this.options.channel && argument == this.client.nick) {
         if (!this.game.running) {
             this.resetChannel();
         }
@@ -275,6 +278,16 @@ Bot.prototype.onCommand = function onCommand (who, where, command, args) {
             /* Join a game */
             case 'join': {
                 this.game.join(who);
+            } break;
+
+            /* Show who am I */
+            case 'who': {
+                var role = this.game.getPlayerRole(who);
+                if (role) {
+                    this.client.notice(who, sprintf('%s: You are a \x1f\x02%s\x02\x1f', who, role));
+                } else {
+                    this.client.notice(who, sprintf('%s: You are not currently playing', who));
+                }
             } break;
 
             /* Kill a player */

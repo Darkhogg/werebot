@@ -10,7 +10,7 @@ var townsSecond = fs.readFileSync(path.join(path.dirname(require.main.filename),
 module.exports.generateTownName = function generateTownName () {
     return townsFirst[Math.floor(Math.random() * townsFirst.length)]
          + townsSecond[Math.floor(Math.random() * townsSecond.length)];
-}
+};
 
 module.exports.mostVoted = function mostVoted (votes) {
     var maxVotes = 0;
@@ -27,7 +27,24 @@ module.exports.mostVoted = function mostVoted (votes) {
     });
 
     return winner;
-}
+};
+
+module.exports.mostVotedMulti = function mostVotedMulti (votes) {
+    var maxVotes = 0;
+    var winners = [];
+
+    _.forEach(votes, function (votes, player) {
+        if (votes > maxVotes) {
+            maxVotes = votes;
+            winners = [player];
+
+        } else if (votes == maxVotes) {
+            winners.push(player);
+        }
+    });
+
+    return winners;
+};
 
 module.exports.joinWithMax = function joinWithMax (array, glue, linesize) {
     var pieces = [];
@@ -51,4 +68,4 @@ module.exports.joinWithMax = function joinWithMax (array, glue, linesize) {
     }
 
     return pieces;
-}
+};
