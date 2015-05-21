@@ -106,6 +106,7 @@ Game.DEATH_LYNCH      = 'lynch';
 Game.DEATH_DISAPPEAR  = 'disappear';
 
 /* === GAME SIDES === */
+Game.SIDE_NOBODY = 'nobody';
 Game.SIDE_TOWN   = 'town';
 Game.SIDE_WOLVES = 'werewolves';
 
@@ -160,11 +161,16 @@ Game.prototype.countRolePlayers = function countRolePlayers (role) {
 };
 
 Game.prototype.checkVictory = function checkVictory () {
+    /* Victory already set */
     if (this.winningSide) {
         return true;
     }
 
-    if (this.countRolePlayers(Game.ROLE_WOLF) == 0) {
+    if (this.players.players.length) {
+        this.winningSide = Game.SIDE_NOBODY;
+        return true;
+
+    } else if (this.countRolePlayers(Game.ROLE_WOLF) == 0) {
         this.winningSide = Game.SIDE_TOWN;
         return true;
 

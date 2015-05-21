@@ -280,6 +280,10 @@ Bot.prototype.onCommand = function onCommand (who, where, command, args) {
                 this.game.join(who);
             } break;
 
+            case 'leave': {
+                this.game.playerLeft(who);
+            } break;
+
             /* Show who am I */
             case 'who': {
                 var role = this.game.getPlayerRole(who);
@@ -338,7 +342,7 @@ Bot.prototype.onGameEndGame = function onGameEndGame () {
                     '\x0304The \x02werewolves\x02 have won by killing all humans!');
             } break;
 
-            default: {
+            case Game.SIDE_NOBODY: {
                 this.client.say(this.options.channel,
                     '\x0314\x02Nobody\x02 has won the game');
             }
