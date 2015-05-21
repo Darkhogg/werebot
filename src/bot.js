@@ -96,6 +96,9 @@ Bot.prototype.start = function start (version) {
     this.game.on('start-turn:' + Game.TURN_LYNCHING, this.onGameStartTurnLynching, this);
     this.game.on(  'end-turn:' + Game.TURN_LYNCHING, this.onGameEndTurnLynching, this);
 
+    this.game.on('start-turn:' + Game.TURN_SEER, this.onGameStartTurnSeer, this);
+    this.game.on(  'end-turn:' + Game.TURN_SEER, this.onGameEndTurnSeer, this);
+
     this.game.on('roles', this.onGameAssignedRoles, this);
 
     this.game.on('death', this.onGameDeath, this);
@@ -104,6 +107,7 @@ Bot.prototype.start = function start (version) {
     this.game.on('leave', this.onGameLeave, this);
     this.game.on('kill', this.onGameKill, this);
     this.game.on('vote', this.onGameVote, this);
+    this.game.on('see', this.onGameSee, this);
 };
 
 Bot.prototype.stop = function stop (message) {
@@ -299,8 +303,14 @@ Bot.prototype.onCommand = function onCommand (who, where, command, args) {
                 this.game.kill(who, args[0]);
             } break;
 
+            /* Vote for lynching */
             case 'vote': {
                 this.game.lynch(who, args[0]);
+            } break;
+
+            /* Use the seer ability */
+            case 'see': {
+                this.game.see(who, args[0]);
             } break;
 
             /* Command not found */
@@ -505,6 +515,28 @@ Bot.prototype.onGameEndTurnLynching = function onGameEndTurnLynching () {
     this.client.say(this.options.channel, 'A decision has been made');
 };
 
+
+Bot.prototype.onGameStartTurnSeer = function onGameStartTurnSeer () {
+    var _this = this;
+
+    this.game.getRolePlayers(Game.TURN_SEER).forEach(function (seer) {
+        _this.client.notice(seer, 'Your crystal ball lights up, giving you the chance of knowing the true identity of a villager');
+        _this.client.notice(seer, sprintf('To reveal the role of a player, write \x1f/msg %1$s !see \x1dnick\x1d\x1f, or \x1f/msg %1$s !see \x1d-\x1d\x1f to skip the turn', _this.client.nick));
+        _this.client.notice(seer, sprintf('You have \x02%s\x02 seconds until your crystal ball loses power', Game.TIME_SEER));
+    });
+};
+
+Bot.prototype.onGameEndTurnSeer = function onGameEndTurnSeer () {
+    var _this = this;
+
+    this.game.getRolePlayers(Game.TURN_SEER).forEach(function (seer) {
+        _this.client.notice(seer, 'Your crystal ball goes black, you\'ll need to wait a day to use it again');
+    });
+};
+
+
+
+
 Bot.prototype.onGameDeath = function (player, role, reason) {
     var prefix = ((role == Game.ROLE_WOLF) ? '\x0303' : '\x0304')
         + '\x02' + player + '\x02, the \x02' + role + '\x02, ';
@@ -593,5 +625,11 @@ Bot.prototype.onGameVote = function onGameVote (player, target) {
     });
 };
 
+
+Bot.prototype.onGameSee = function onGameSee (player, target, role) {
+    var _this = this;
+
+    this.client.notice(player, sprintf('%s: The player \x02%s\x02 is a \x02\x1f%s\x1f\x02', player, target, role));
+}
 
 module.exports = Bot;

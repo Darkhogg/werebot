@@ -59,7 +59,7 @@ Game.prototype._emit = function emit () {
     });
 };
 
-Game.MIN_PLAYERS = 5;
+Game.MIN_PLAYERS = config.minPlayers || 5;
 
 /* === PLAYER ROLES === */
 Game.ROLE_VILLAGER = 'villager';
@@ -93,8 +93,8 @@ Game.TIME_JOINING    = 60;
 Game.TIME_ELECTION   = 150;
 Game.TIME_CONCUBINE  = 45;
 Game.TIME_WOLVES     = 60;
-Game.TIME_SEER       = 30;
-Game.TIME_WITCH      = 30;
+Game.TIME_SEER       = 45;
+Game.TIME_WITCH      = 45;
 Game.TIME_HUNTER     = 30;
 Game.TIME_DISCUSSION = 60;
 Game.TIME_LYNCHING   = 150;
@@ -166,7 +166,7 @@ Game.prototype.checkVictory = function checkVictory () {
         return true;
     }
 
-    if (this.players.players.length) {
+    if (this.players.length == 0) {
         this.winningSide = Game.SIDE_NOBODY;
         return true;
 
@@ -292,7 +292,7 @@ Game.prototype.assignRoles = function assignRoles () {
     this.roles = {};
 
     /* Define all wanted roles */
-    var roles = []; // TODO
+    var roles = [Game.ROLE_SEER]; // TODO
 
     /* Find out how many wolves */
     var numWolves = Math.floor(Math.max(1, (this.players.length + 4) / 5));
@@ -418,7 +418,7 @@ Game.prototype.onStartPhasePreparation = function onStartPhasePreparation () {
 };
 
 Game.prototype.onEndPhasePreparation = function onEndPhasePreparation () {
-    if (this.players >= Game.MIN_PLAYERS) {
+    if (this.players.length >= Game.MIN_PLAYERS) {
         this.startPhase(Game.PHASE_NIGHTTIME);
     }
 };
@@ -429,7 +429,7 @@ Game.prototype.onStartPhaseNight = function onStartPhaseNight () {
 
     this.startTurn(Game.TURN_WOLVES, Game.TIME_WOLVES);
 
-    if (this.countRolePlayers(Game.ROLE_SEER) > 0) {
+    if (this.existingRoles.indexOf(Game.ROLE_SEER) >= 0) {
         this.startTurn(Game.TURN_SEER, Game.TIME_SEER);
     }
 };
@@ -633,7 +633,7 @@ Game.prototype.kill = function kill (name, victimName) {
 };
 
 Game.prototype.lynch = function (name, targetName) {
-   var player = this.findPlayer(name);
+    var player = this.findPlayer(name);
 
     if (!player) {
         throw new GameError('player_not_playing');
@@ -677,6 +677,46 @@ Game.prototype.lynch = function (name, targetName) {
         this.endTurn(Game.TURN_LYNCHING);
     }
 };
+
+Game.prototype.see = function see (name, targetName) {
+    var player = this.findPlayer(name);
+
+    if (!player) {
+        throw new GameError('player_not_playing');
+    }
+
+    if (this.getPlayerRole(player) != Game.ROLE_SEER) {
+        throw new GameError('see_not_seer');
+    }
+
+    if (!this.isTurn(Game.TURN_SEER)) {
+        throw new GameError('see_not_in_turn');
+    }
+
+    if (this.usedSeer) {
+        throw new GameError('see_already_seen');
+    }
+
+    var target = this.findPlayer(targetName);
+
+    if (!target && targetName != BLANK) {
+        throw new GameError('see_target_not_playing');
+    }
+
+    if (target == player) {
+        throw new GameError('see_target_is_you');
+    }
+
+    /* --- Everything OK --- */
+
+    logger.verbose('SEE("%s")', name, target);
+
+    this.usedSeer = true;
+
+    this._emit('see', player, target, this.getPlayerRole(target));
+
+    this.endTurn(Game.TURN_SEER);
+}
 
 /* ====================== */
 /* === MODULE EXPORTS === */
