@@ -93,7 +93,7 @@ Game.TIME_JOINING    = 60;
 Game.TIME_ELECTION   = 150;
 Game.TIME_CONCUBINE  = 45;
 Game.TIME_WOLVES     = 60;
-Game.TIME_SEER       = 60;
+Game.TIME_SEER       = 30;
 Game.TIME_WITCH      = 30;
 Game.TIME_HUNTER     = 30;
 Game.TIME_DISCUSSION = 60;
@@ -287,6 +287,7 @@ Game.prototype.endTurn = function endTurn (turn) {
 Game.prototype.assignRoles = function assignRoles () {
     this.assignedRoles = true;
 
+    this.existingRoles = [];
     this.rolePlayers = {};
     this.roles = {};
 
@@ -326,6 +327,11 @@ Game.prototype.assignRoles = function assignRoles () {
 
         /* Set the player role */
         this.roles[player] = role;
+
+        /* Add the role to the existing roles */
+        if (this.existingRoles.indexOf(role) < 0) {
+            this.existingRoles.push(role);
+        }
     }
 
     /* Emit the apprpriate event */
