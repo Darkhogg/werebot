@@ -62,14 +62,18 @@ Game.prototype._emit = function emit () {
 Game.MIN_PLAYERS = config.minPlayers || 5;
 
 /* === PLAYER ROLES === */
-Game.ROLE_VILLAGER = 'villager';
-Game.ROLE_WOLF     = 'werewolf';
-Game.ROLE_SEER     = 'seer';
-Game.ROLE_WITCH    = 'witch';
-Game.ROLE_HUNTER   = 'hunter';
-Game.ROLE_CUPID    = 'concubine';
-Game.ROLE_GUARDING = 'guarding angel';
-Game.ROLE_SPY      = 'spy';
+Game.ROLE_VILLAGER  = 'villager';
+Game.ROLE_WOLF      = 'werewolf';
+Game.ROLE_SEER      = 'seer';
+Game.ROLE_WITCH     = 'witch';
+Game.ROLE_HUNTER    = 'hunter';
+Game.ROLE_CUPID     = 'cupid';
+
+/* === MIN PLAYERS FOR ROLE === */
+Game.PLAYERS_SEER   = 1;
+Game.PLAYERS_WITCH  = 1;
+Game.PLAYERS_HUNTER = 1;
+Game.PLAYERS_CUPID  = 1;
 
 /* === GAME PHASES === */
 Game.PHASE_PREPARATION = 'preparation';
@@ -79,7 +83,7 @@ Game.PHASE_NIGHTTIME   = 'night';
 /* === PLAYER TURNS === */
 Game.TURN_JOINING    = 'joining';
 Game.TURN_ELECTION   = 'election';
-Game.TURN_CONCUBINE  = 'concubine';
+Game.TURN_CUPID      = 'cupid';
 Game.TURN_WOLVES     = 'wolves';
 Game.TURN_SEER       = 'seer';
 Game.TURN_WITCH      = 'witch';
@@ -91,7 +95,7 @@ Game.TURN_SHERIFF    = 'sheriff';
 /* === TURN DURATIONS === */
 Game.TIME_JOINING    = 60;
 Game.TIME_ELECTION   = 150;
-Game.TIME_CONCUBINE  = 45;
+Game.TIME_CUPID      = 45;
 Game.TIME_WOLVES     = 60;
 Game.TIME_SEER       = 45;
 Game.TIME_WITCH      = 45;
@@ -109,6 +113,17 @@ Game.DEATH_DISAPPEAR  = 'disappear';
 Game.SIDE_NOBODY = 'nobody';
 Game.SIDE_TOWN   = 'town';
 Game.SIDE_WOLVES = 'werewolves';
+
+/* === DEFAULT ROLE SIDES === */
+Game.DEFAULT_SIDES = {};
+
+Game.DEFAULT_SIDES[Game.ROLE_VILLAGER] = Game.SIDE_TOWN;
+Game.DEFAULT_SIDES[Game.ROLE_SEER]     = Game.SIDE_TOWN;
+Game.DEFAULT_SIDES[Game.ROLE_WITCH]    = Game.SIDE_TOWN;
+Game.DEFAULT_SIDES[Game.ROLE_HUNTER]   = Game.SIDE_TOWN;
+Game.DEFAULT_SIDES[Game.ROLE_CUPID]    = Game.SIDE_TOWN;
+
+Game.DEFAULT_SIDES[Game.ROLE_WOLF] = Game.SIDE_WOLVES;
 
 /* =========================== */
 /* === INFORMATION GETTERS === */
@@ -227,8 +242,14 @@ Game.prototype.startGame = function startGame () {
 
     this.deaths = [];
     this.players = [];
+
     this.roles = {};
     this.rolePlayers = {};
+    this.existingRoles = [];
+
+    this.sides = {};
+    this.sidePlayers = {};
+    this.existingSides = [];
 
     this.running = true;
 
@@ -291,14 +312,39 @@ Game.prototype.assignRoles = function assignRoles () {
     this.rolePlayers = {};
     this.roles = {};
 
-    /* Define all wanted roles */
-    var roles = [Game.ROLE_SEER]; // TODO
+    this.existingSides = [];
+    this.sidePlayers = {};
+    this.sides = {};
 
-    /* Find out how many wolves */
+    /* Start defining the number of roles */
+    var roles = [];
+
     var numWolves = Math.floor(Math.max(1, (this.players.length + 4) / 5));
 
-    /* Fill the remaining with villagers, with a minimum (numWolves+1) willagers */
-    var numVillagers = 1 + Math.max(numWolves, this.players.length - roles.length - numWolves);
+    var extraRoles = (numWolves > 1) ? 1 : 0;
+    var numRoles = this.players.length + extraRoles;
+
+    if (this.players.length >= Game.PLAYERS_SEER) {
+        roles.push(Game.ROLE_SEER);
+    }
+    if (this.players.length >= Game.PLAYERS_WITCH) {
+        roles.push(Game.ROLE_WITCH);
+    }
+    if (this.players.length >= Game.PLAYERS_CUPID) {
+        roles.push(Game.ROLE_CUPID);
+    }
+    if (this.players.length >= Game.PLAYERS_HUNTER) {
+        roles.push(Game.ROLE_HUNTER);
+    }
+
+    var numVillagers = numRoles - numWolves - roles.length;
+
+    /* Add the wolves */
+    for (var i = 0; i < numWolves; i++) {
+        roles.push(Game.ROLE_WOLF);
+    }
+
+    /* Add the villagers */
     for (var i = 0; i < numVillagers; i++) {
         roles.push(Game.ROLE_VILLAGER);
     }
@@ -307,15 +353,14 @@ Game.prototype.assignRoles = function assignRoles () {
     var randPlayers = _.shuffle(this.players);
     var randRoles   = _.shuffle(roles);
 
-    /* Add as many werewolves as necessary at the start */
-    for (var i = 0; i < numWolves; i++) {
-        randRoles.unshift(Game.ROLE_WOLF);
-    }
+    console.log(randPlayers);
+    console.log(randRoles);
 
     /* Assign a role to each player, in "order" */
     for (var i in randPlayers) {
         var player = randPlayers[i];
-        var role =randRoles[i];
+        var role = randRoles[i];
+        var side = Game.DEFAULT_SIDES[role];
 
         logger.verbose('Assign: "%s" is a "%s"', player, role);
 
@@ -332,7 +377,24 @@ Game.prototype.assignRoles = function assignRoles () {
         if (this.existingRoles.indexOf(role) < 0) {
             this.existingRoles.push(role);
         }
+
+        /* Add the player to the side list */
+        if (!this.sidePlayers[side]) {
+            this.sidePlayers[side] = [];
+        }
+        this.sidePlayers[side].push(player);
+
+        /* Set the player side (as a list -- there can be multiple sides!) */
+        this.sides[player] = [side];
+
+        /* Add the side to the existing sides if it didn't exist */
+        if (this.existingSides.indexOf(side) < 0) {
+            this.existingSides.push(side);
+        }
     }
+
+    /* All roles after the last one assigned should be left for the thief */
+    // TODO Thief
 
     /* Emit the apprpriate event */
     this._emit('roles');

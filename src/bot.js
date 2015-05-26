@@ -29,7 +29,9 @@ var Bot = function Bot (opts) {
 
 Bot.prototype.start = function start (version) {
     var _this = this;
+
     this.names = {};
+    this.isRegistered = {};
 
     logger.info('Starting Bot (v%s)', version);
 
@@ -37,7 +39,8 @@ Bot.prototype.start = function start (version) {
         this.options.host,
         this.options.nick,
         {
-            channels: [this.options.channel],
+            //debug: true,
+            channels: [],
             secure: true,
             selfSigned: true,
             port: this.options.port,
@@ -52,8 +55,13 @@ Bot.prototype.start = function start (version) {
         _this.recoverNick();
     });
 
+    this.client.once('motd', function (motd) {
+        _this.recoverGameChannel();
+        _this.recoverWolvesChannel();
+    });
+
     this.client.on('error', function (err) {
-        logger.error(err);
+        logger.error(' /!\\ /!\\  %s (%s):', err.command, err.rawCommand, err.args.join(', '));
     });
 
     this.client.on('invite',  this.onInvite.bind(this));
@@ -127,9 +135,14 @@ Bot.prototype.recoverNick = function () {
     }
 };
 
+Bot.prototype.recoverGameChannel = function () {
+    this.client.join(this.options.channel);
+    this.client.say('ChanServ', sprintf('INVITE %s', this.options.channel));
+}
+
 Bot.prototype.recoverWolvesChannel = function () {
-    logger.verbose('Requesting ChanServ an invite to %s', this.options.channelWolves);
-    this.client.say('ChanServ', 'INVITE ' + this.options.channelWolves);
+    this.client.join(this.options.channelWolves);
+    this.client.say('ChanServ', sprintf('INVITE %s', this.options.channelWolves));
 };
 
 Bot.prototype.resetChannel = function () {
@@ -137,13 +150,17 @@ Bot.prototype.resetChannel = function () {
     this.client.say('ChanServ', 'SYNC ' + this.options.channel);
 };
 
+Bot.prototype.checkRegistered = function (who) {
+    this.client.say('NickServ', 'STATUS ' + who);
+};
+
 Bot.prototype.onInvite = function onInvite (channel, from, msg) {
     var _this = this;
 
     logger.silly('[ INVITE] %s %s', from, channel);
 
-    if (channel == _this.options.channelWolves) {
-        _this.client.join(_this.options.channelWolves);
+    if ([_this.options.channel, _this.options.channelWolves, _this.options.channelTalk].indexOf(channel) >= 0) {
+        _this.client.join(channel);
     }
 };
 
@@ -155,6 +172,12 @@ Bot.prototype.onJoin = function onJoin (channel, who, msg) {
     }
 
     this.names[channel].push(who);
+
+    this.checkRegistered(who);
+
+    if (who == this.client.nick) {
+        this.names[this.options.channel].forEach(this.checkRegistered.bind(this));
+    }
 };
 
 Bot.prototype.onPart = function onJoin (channel, who, msg) {
@@ -237,6 +260,14 @@ Bot.prototype.onSubMode = function (channel, by, mode, argument, msg) {
 
 Bot.prototype.onNotice = function onNotice (from, to, text, msg) {
     logger.silly('[ NOTICE] %s %s: ', from, to, text);
+
+    if (from == 'NickServ' && text.indexOf('STATUS') == 0) {
+        var parts = text.substring(1).split(/\s+/);
+        var who = parts[1];
+        var num = parseInt(parts[2]);
+
+        this.isRegistered[who] = (num >= 2);
+    }
 };
 
 Bot.prototype.onNames = function onNames (channel, nicks) {
@@ -335,6 +366,8 @@ Bot.prototype.onGameStartGame = function onGameStartGame () {
 
     this.client.notice(this.options.channel,
         'A new game is about to start!');
+
+    this.names[this.options.channel].forEach(this.checkRegistered.bind(this));
 };
 
 Bot.prototype.onGameEndGame = function onGameEndGame () {
