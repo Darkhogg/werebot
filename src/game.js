@@ -538,15 +538,15 @@ Game.prototype.onEndTurnJoining = function onEndTurnJoining () {
 
 Game.prototype.onStartTurnWolves = function onStartTurnWolves () {
     this.wolvesVictim = null;
-    this.killVictims = {};
-    this.killVoted = {};
-    this.totalKillVoted = [];
+    this.attackVictims = {};
+    this.attackVoted = {};
+    this.totalAttackVoted = [];
 };
 
 Game.prototype.onEndTurnWolves = function onEndTurnWolves () {
     var _this = this;
 
-    var victims = utils.mostVotedMulti(this.killVictims);
+    var victims = utils.mostVotedMulti(this.attackVictims);
     if (victims.length == 0) {
         victims = this.players.filter(function (player) {
             return _this.getRolePlayers(Game.ROLE_WOLF).indexOf(player) < 0;
@@ -624,7 +624,7 @@ Game.prototype.join = function join (name) {
     this._emit('join', name, this.players.length);
 };
 
-Game.prototype.kill = function kill (name, victimName) {
+Game.prototype.attack = function attack (name, victimName) {
     var player = this.findPlayer(name);
 
     if (!player) {
@@ -632,62 +632,62 @@ Game.prototype.kill = function kill (name, victimName) {
     }
 
     if (this.getPlayerRole(player) != Game.ROLE_WOLF) {
-        throw new GameError('kill_not_a_wolf');
+        throw new GameError('attack_not_a_wolf');
     }
 
     if (!this.isTurn(Game.TURN_WOLVES)) {
-        throw new GameError('kill_not_in_turn');
+        throw new GameError('attack_not_in_turn');
     }
 
     var victim = this.findPlayer(victimName);
 
     if (!victim && victimName != BLANK) {
-        throw new GameError('kill_victim_not_playing');
+        throw new GameError('attack_victim_not_playing');
     }
 
     if (this.getPlayerRole(victim) == Game.ROLE_WOLF) {
-        throw new GameError('kill_victim_wolf');
+        throw new GameError('attack_victim_wolf');
     }
 
     /* --- Everything OK --- */
 
-    logger.verbose('KILL("%s")', name, victim);
+    logger.verbose('ATTACK("%s")', name, victim);
 
     /* Add the player to the list of who voted */
-    if (this.totalKillVoted.indexOf(player) < 0) {
-        this.totalKillVoted.push(player);
+    if (this.totalAttackVoted.indexOf(player) < 0) {
+        this.totalAttackVoted.push(player);
     }
 
     /* Create a vote entry if not present (and not blank) */
-    if (victimName != BLANK && !this.killVictims[victim]) {
-        this.killVictims[victim] = 0;
+    if (victimName != BLANK && !this.attackVictims[victim]) {
+        this.attackVictims[victim] = 0;
     }
 
     var oldVictim = null;
 
     /* If there was already a vote from this wolf, remove it */
-    if (this.killVoted[player]) {
-        oldVictim = this.killVoted[player];
+    if (this.attackVoted[player]) {
+        oldVictim = this.attackVoted[player];
 
-        this.killVictims[oldVictim]--;
-        this.killVoted[player] = undefined;
+        this.attackVictims[oldVictim]--;
+        this.attackVoted[player] = undefined;
     }
 
     /* If the current vote was not blank, add it */
     if (victimName != BLANK) {
-        this.killVictims[victim]++;
-        this.killVoted[player] = victim;
+        this.attackVictims[victim]++;
+        this.attackVoted[player] = victim;
     }
 
-    console.log(this.totalKillVoted);
-    console.log(this.killVictims);
+    console.log(this.totalAttackVoted);
+    console.log(this.attackVictims);
 
-    this._emit('kill', player, victim, oldVictim);
+    this._emit('attack', player, victim, oldVictim);
 
     /* If everyone has voted and there is majority, end the turn */
     if (
-        this.totalKillVoted.length >= this.getRolePlayers(Game.ROLE_WOLF).length &&
-        utils.mostVoted(this.killVictims)
+        this.totalAttackVoted.length >= this.getRolePlayers(Game.ROLE_WOLF).length &&
+        utils.mostVoted(this.attackVictims)
     ) {
         this.endTurn(Game.TURN_WOLVES);
     }
@@ -721,7 +721,7 @@ Game.prototype.lynch = function (name, targetName) {
     this.lynchTotalVotes ++;
 
     /* Create a vote entry if not present (and not blank) */
-    if (target && !this.killVictims[target]) {
+    if (target && !this.attackVictims[target]) {
         this.lynchVictims[target] = 0;
     }
 

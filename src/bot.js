@@ -17,7 +17,7 @@ var aliases = {
     'j': 'join',
     'w': 'who',
 
-    'k': 'kill',
+    'a': 'attack',
     'v': 'vote',
 
     'rev': 'revenge',
@@ -113,7 +113,7 @@ Bot.prototype.start = function start (version) {
 
     this.game.on('join', this.onGameJoin, this);
     this.game.on('leave', this.onGameLeave, this);
-    this.game.on('kill', this.onGameKill, this);
+    this.game.on('attack', this.onGameAttack, this);
     this.game.on('vote', this.onGameVote, this);
     this.game.on('see', this.onGameSee, this);
 };
@@ -329,9 +329,9 @@ Bot.prototype.onCommand = function onCommand (who, where, command, args) {
                 }
             } break;
 
-            /* Kill a player */
-            case 'kill': {
-                this.game.kill(who, args[0]);
+            /* Attack a player */
+            case 'attack': {
+                this.game.attack(who, args[0]);
             } break;
 
             /* Vote for lynching */
@@ -504,9 +504,9 @@ Bot.prototype.onGameStartTurnWolves = function onGameStartTurnWolves () {
 
     this.game.getRolePlayers(Game.ROLE_WOLF).forEach(function (wolf) {
         _this.client.send('INVITE', wolf, _this.options.channelWolves);
-        _this.client.notice(wolf, 'It\'s time to hunt! Join \x1f' + _this.options.channelWolves + '\x1f to discuss who to kill with the other werewolves');
+        _this.client.notice(wolf, 'It\'s time to hunt! Join \x1f' + _this.options.channelWolves + '\x1f to discuss who to attack with the other werewolves');
 
-        _this.client.notice(wolf, 'When you\'re ready, vote for killing by saying \x1f!kill nick\x1f, or \x1f!kill -\x1f to skip vote');
+        _this.client.notice(wolf, 'When you\'re ready, vote for attacking by saying \x1f!attack nick\x1f, or \x1f!attack -\x1f to skip vote');
         _this.client.notice(wolf, 'If a tie is reached, a random player from the tie will die!');
     });
 };
@@ -607,20 +607,20 @@ Bot.prototype.onGameLeave = function onGameLeave (player, numPlayers) {
         '\x02' + player + '\x02 left the game.  (\x02' + numPlayers + '\x02 player' + (numPlayers != 1 ? 's are ' : ' is ') + 'still in)');
 };
 
-Bot.prototype.onGameKill = function onGameKill (player, victim, oldVictim) {
+Bot.prototype.onGameAttack = function onGameAttack (player, victim, oldVictim) {
     var _this = this;
 
     var msg = [
-        '\x02%1$s\x02 doesn\'t want to kill anyone', // null, null
-        '\x02%1$s\x02 wants to kill \x02\x1f%2$s\x1f\x02', // "str", null
-        '\x02%1$s\x02 doesn\'t want to kill \x1f%3$s\x1f anymore', // null, "str"
-        '\x02%1$s\x02 wants to kill \x02\x1f%2$s\x1f\x02 instead of \x1f%3$s\x1f', // "str", "str"
+        '\x02%1$s\x02 doesn\'t want to attack anyone', // null, null
+        '\x02%1$s\x02 wants to attack \x02\x1f%2$s\x1f\x02', // "str", null
+        '\x02%1$s\x02 doesn\'t want to attack \x1f%3$s\x1f anymore', // null, "str"
+        '\x02%1$s\x02 wants to attack \x02\x1f%2$s\x1f\x02 instead of \x1f%3$s\x1f', // "str", "str"
     ][(+!!victim) + (+!!oldVictim)*2];
 
 
     var pieces = [];
 
-    _.forEach(this.game.killVictims, function (votes, votedPlayer) {
+    _.forEach(this.game.attackVictims, function (votes, votedPlayer) {
         pieces.push(sprintf('\x0305\x1f%s\x1f: \x02%d\x02\x0f', votedPlayer, votes));
     });
 
