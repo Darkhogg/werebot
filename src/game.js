@@ -259,6 +259,9 @@ Game.prototype.startGame = function startGame () {
     this.sidePlayers = {};
     this.existingSides = [];
 
+    this.lifePotions = 1;
+    this.deathPotions = 1;
+
     this.running = true;
 
     this.activeTurns = [];
@@ -559,7 +562,7 @@ Game.prototype.onEndTurnWolves = function onEndTurnWolves () {
     }
 
     /* Start the turn of the witch */
-    if (this.countRolePlayers(Game.ROLE_WITCH) > 0) {
+    if (this.existingRoles.indexOf(Game.ROLE_WITCH)) {
         this.startTurn(Game.TURN_WITCH, Game.TIME_WITCH);
     }
 };
@@ -777,7 +780,47 @@ Game.prototype.see = function see (name, targetName) {
     this._emit('see', player, target, this.getPlayerRole(target));
 
     this.endTurn(Game.TURN_SEER);
-}
+};
+
+Game.prototype.useLife = function useLife (name, targetName) {
+    var player = this.findPlayer(name);
+
+    if (!player) {
+        throw new GameError('player_not_playing');
+    }
+
+    if (this.getPlayerRole(player) != Game.ROLE_WITCH) {
+        throw new GameError('lifepot_not_witch');
+    }
+
+    if (!this.isTurn(Game.TURN_WITCH)) {
+        throw new GameError('lifepot_not_in_turn');
+    }
+
+    if (this.lifePotions <= 0) {
+        throw new GameError('lifepot_no_potions');
+    }
+};
+
+Game.prototype.useDeath = function useDeath (name, targetName) {
+    var player = this.findPlayer(name);
+
+    if (!player) {
+        throw new GameError('player_not_playing');
+    }
+
+    if (this.getPlayerRole(player) != Game.ROLE_WITCH) {
+        throw new GameError('deathpot_not_witch');
+    }
+
+    if (!this.isTurn(Game.TURN_WITCH)) {
+        throw new GameError('deathpot_not_in_turn');
+    }
+
+    if (this.deathPotions <= 0) {
+        throw new GameError('deathpot_no_potions');
+    }
+};
 
 /* ====================== */
 /* === MODULE EXPORTS === */
