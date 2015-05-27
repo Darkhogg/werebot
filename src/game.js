@@ -75,6 +75,14 @@ Game.PLAYERS_WITCH  = 1;
 Game.PLAYERS_HUNTER = 1;
 Game.PLAYERS_CUPID  = 1;
 
+/* === ROLE PRIORITY & PLAYERS === */
+Game.ROLEPLAYERS = [
+    { 'role': Game.ROLE_SEER,   'players': Game.PLAYERS_SEER },
+    { 'role': Game.ROLE_WITCH,  'players': Game.PLAYERS_WITCH },
+    { 'role': Game.ROLE_HUNTER, 'players': Game.PLAYERS_HUNTER },
+    { 'role': Game.ROLE_CUPID,  'players': Game.PLAYERS_CUPID },
+];
+
 /* === GAME PHASES === */
 Game.PHASE_PREPARATION = 'preparation';
 Game.PHASE_DAYTIME     = 'day';
@@ -321,40 +329,31 @@ Game.prototype.assignRoles = function assignRoles () {
 
     var numWolves = Math.floor(Math.max(1, (this.players.length + 4) / 5));
 
-    var extraRoles = (numWolves > 1) ? 1 : 0;
-    var numRoles = this.players.length + extraRoles;
-
-    if (this.players.length >= Game.PLAYERS_SEER) {
-        roles.push(Game.ROLE_SEER);
-    }
-    if (this.players.length >= Game.PLAYERS_WITCH) {
-        roles.push(Game.ROLE_WITCH);
-    }
-    if (this.players.length >= Game.PLAYERS_CUPID) {
-        roles.push(Game.ROLE_CUPID);
-    }
-    if (this.players.length >= Game.PLAYERS_HUNTER) {
-        roles.push(Game.ROLE_HUNTER);
-    }
-
-    var numVillagers = numRoles - numWolves - roles.length;
-
     /* Add the wolves */
     for (var i = 0; i < numWolves; i++) {
         roles.push(Game.ROLE_WOLF);
     }
 
+    var extraRoles = (numWolves > 1) ? 1 : 0;
+    var numRoles = this.players.length + extraRoles;
+
+    /* Add the regular roles based on priority/players */
+    for (var i = 0; i < Game.ROLEPLAYERS.length && roles.length < numRoles; i++) {
+        var rolespec = Game.ROLEPLAYERS[i];
+
+        if (this.players.length >= rolespec.players) {
+            roles.push(rolespec.role);
+        }
+    }
+
     /* Add the villagers */
-    for (var i = 0; i < numVillagers; i++) {
+    while (roles.length < numRoles) {
         roles.push(Game.ROLE_VILLAGER);
     }
 
     /* Shuffle the players and the roles */
     var randPlayers = _.shuffle(this.players);
     var randRoles   = _.shuffle(roles);
-
-    console.log(randPlayers);
-    console.log(randRoles);
 
     /* Assign a role to each player, in "order" */
     for (var i in randPlayers) {

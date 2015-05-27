@@ -61,7 +61,7 @@ Bot.prototype.start = function start (version) {
     });
 
     this.client.on('error', function (err) {
-        logger.error(' /!\\ /!\\  %s (%s):', err.command, err.rawCommand, err.args.join(', '));
+        logger.warn(' /!\\ /!\\  %s (%s):', err.command, err.rawCommand, err.args.join(', '));
     });
 
     this.client.on('invite',  this.onInvite.bind(this));
@@ -126,7 +126,7 @@ Bot.prototype.stop = function stop (message) {
     this.client.disconnect(message);
 };
 
-Bot.prototype.recoverNick = function () {
+Bot.prototype.recoverNick = function (force) {
     this.client.send('NICK', this.options.nick);
 
     if (this.options.nickservPassword) {
@@ -618,13 +618,13 @@ Bot.prototype.onGameKill = function onGameKill (player, victim, oldVictim) {
     ][(+!!victim) + (+!!oldVictim)*2];
 
 
-    var pieces = ['Votes:'];
+    var pieces = [];
 
     _.forEach(this.game.killVictims, function (votes, votedPlayer) {
         pieces.push(sprintf('\x0305\x1f%s\x1f: \x02%d\x02\x0f', votedPlayer, votes));
     });
 
-    var joinedPieces = utils.joinWithMax(pieces, '   ', 80);
+    var joinedPieces = utils.joinWithMax(pieces, '   ', 80, 'Votes:  ');
 
     this.game.getRolePlayers(Game.ROLE_WOLF).forEach(function (wolf) {
         _this.client.notice(wolf, sprintf(msg, player, victim, oldVictim));

@@ -46,9 +46,11 @@ module.exports.mostVotedMulti = function mostVotedMulti (votes) {
     return winners;
 };
 
-module.exports.joinWithMax = function joinWithMax (array, glue, linesize) {
+module.exports.joinWithMax = function joinWithMax (array, glue, linesize, prefix_) {
+    var prefix = prefix_ || '';
+
     var pieces = [];
-    var line = '';
+    var line = prefix;
 
     for (var i = 0; i < array.length; i++) {
         if (line) {
