@@ -71,3 +71,11 @@ module.exports.joinWithMax = function joinWithMax (array, glue, linesize, prefix
 
     return pieces;
 };
+
+module.exports.randomRange = function randomRange (min_, max_, step_) {
+    var min = max_ === undefined ? 0 : min_;
+    var max = max_ === undefined ? min_ : max_;
+    var step = step_ || 1;
+
+    return step * Math.floor((min + Math.random() * (max - min)) / step);
+}

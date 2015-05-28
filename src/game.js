@@ -42,6 +42,12 @@ var Game = function Game () {
 
     this.on('start-turn:' + Game.TURN_LYNCHING, this.onStartTurnLynching, this);
     this.on(  'end-turn:' + Game.TURN_LYNCHING, this.onEndTurnLynching, this);
+
+    this.on('start-turn:' + Game.TURN_SEER, this.onStartTurnSeer, this);
+    this.on(  'end-turn:' + Game.TURN_SEER, this.onEndTurnSeer, this);
+
+    this.on('start-turn:' + Game.TURN_Witch, this.onStartTurnWitch, this);
+    this.on(  'end-turn:' + Game.TURN_Witch, this.onEndTurnWitch, this);
 };
 
 var GameError = Game.Error = function GameError (message) {
@@ -70,10 +76,10 @@ Game.ROLE_HUNTER    = 'hunter';
 Game.ROLE_CUPID     = 'cupid';
 
 /* === MIN PLAYERS FOR ROLE === */
-Game.PLAYERS_SEER   = 1;
-Game.PLAYERS_WITCH  = 1;
-Game.PLAYERS_HUNTER = 1;
-Game.PLAYERS_CUPID  = 1;
+Game.PLAYERS_SEER   = 5;
+Game.PLAYERS_WITCH  = 1//6;
+Game.PLAYERS_HUNTER = 7;
+Game.PLAYERS_CUPID  = 6;
 
 /* === ROLE PRIORITY & PLAYERS === */
 Game.ROLEPLAYERS = [
@@ -116,6 +122,7 @@ Game.TIME_SHERIFF    = 30;
 Game.DEATH_WOLVES     = 'wolves';
 Game.DEATH_LYNCH      = 'lynch';
 Game.DEATH_DISAPPEAR  = 'disappear';
+Game.DEATH_WITCH      = 'witch';
 
 /* === GAME SIDES === */
 Game.SIDE_NOBODY = 'nobody';
@@ -309,11 +316,10 @@ Game.prototype.startTurn = function startTurn (turn, time) {
     this._emit('start-turn:' + turn);
 };
 
-Game.prototype.endTurn = function endTurn (turn) {
-    this.activeTurns.splice(this.activeTurns.indexOf(turn), 1);
+Game.prototype.endTurn = function endTurn (turn, when) {
+    var now = Date.now();
 
-    this._emit('end-turn', turn);
-    this._emit('end-turn:' + turn);
+    this.turnEndTimes[turn] = now + (when || 0) * 1000;
 };
 
 Game.prototype.assignRoles = function assignRoles () {
@@ -419,6 +425,14 @@ Game.prototype.addDeath = function addDeath (who, why, direct) {
     logger.verbose('Death queue: [%s]', this.deaths.join(', '));
 };
 
+Game.prototype.removeDeath = function removeDeath (who, why) {
+    logger.verbose('Revive: %s %s', who, why);
+
+    this.deaths = this.deaths.filter(function (death) {
+        return !(who == death.player && (!why || why == death.reason));
+    });
+};
+
 Game.prototype.applyDeaths = function applyDeaths () {
     if (this.deaths.length == 0) {
         this._emit('nodeaths');
@@ -426,7 +440,6 @@ Game.prototype.applyDeaths = function applyDeaths () {
 
     while (this.deaths.length > 0) {
         var death = this.deaths.shift();
-
         this.performDeath(death);
     }
 }
@@ -458,6 +471,8 @@ Game.prototype.onTick = function onTick () {
     var _this = this;
     var now = Date.now();
 
+    logger.silly('Phase "%s", Turns ["%s"]', this.phase, this.activeTurns.join('", "'))
+
     /* If there's no current phase, finish the game */
     if (!this.phase) {
         this.endGame();
@@ -471,7 +486,11 @@ Game.prototype.onTick = function onTick () {
     /* End turns when their time passes */
     this.activeTurns.forEach(function (turn) {
         if (now >= _this.turnEndTimes[turn]) {
-            _this.endTurn(turn);
+            _this.phaseEndTime = now + 1500;
+            _this.activeTurns.splice(_this.activeTurns.indexOf(turn), 1);
+
+            _this._emit('end-turn', turn);
+            _this._emit('end-turn:' + turn);
         }
     });
 };
@@ -558,6 +577,8 @@ Game.prototype.onEndTurnWolves = function onEndTurnWolves () {
 
     if (victims.length > 0) {
         this.wolvesVictim = _.shuffle(victims)[0];
+
+        this.emit('wolves-victim', this.wolvesVictim);
         this.addDeath(this.wolvesVictim, Game.DEATH_WOLVES);
     }
 
@@ -565,6 +586,26 @@ Game.prototype.onEndTurnWolves = function onEndTurnWolves () {
     if (this.existingRoles.indexOf(Game.ROLE_WITCH)) {
         this.startTurn(Game.TURN_WITCH, Game.TIME_WITCH);
     }
+};
+
+Game.prototype.onStartTurnSeer = function onStartTurnSeer () {
+    this.usedSeer = false;
+};
+
+Game.prototype.onEndTurnSeer = function onEndTurnSeer () {
+};
+
+
+Game.prototype.onStartTurnWitch = function onStartTurnWitch () {
+    this.usedWitchLife = (this.lifePotions == 0);
+    this.usedWitchDeath = (this.deathPotions == 0);
+
+    if (this.usedWitchLife && this.usedWitchDeath) {
+        this.endTurn(Game.TURN_WITCH, utils.randomRange(10, Game.TIME_WITCH));
+    }
+};
+
+Game.prototype.onEndTurnWitch = function onEndTurnWitch () {
 };
 
 
@@ -682,9 +723,6 @@ Game.prototype.attack = function attack (name, victimName) {
         this.attackVoted[player] = victim;
     }
 
-    console.log(this.totalAttackVoted);
-    console.log(this.attackVictims);
-
     this._emit('attack', player, victim, oldVictim);
 
     /* If everyone has voted and there is majority, end the turn */
@@ -800,6 +838,33 @@ Game.prototype.useLife = function useLife (name, targetName) {
     if (this.lifePotions <= 0) {
         throw new GameError('lifepot_no_potions');
     }
+
+    if (this.usedWitchLife) {
+        throw new GameError('lifepot_already_used');
+    }
+
+    var target = this.findPlayer(targetName);
+
+    if (!target && targetName != BLANK) {
+        throw new GameError('lifepot_target_not_playing');
+    }
+
+    if (target != this.wolvesVictim) {
+        throw new GameError('lifepot_not_attacked');
+    }
+
+    if (target) {
+        this.removeDeath(target, Game.DEATH_WOLVES);
+        this.lifePotions--;
+    }
+
+    this.usedWitchLife = true;
+
+    if (this.usedWitchLife && this.usedWitchDeath) {
+        this.endTurn(Game.TURN_WITCH);
+    }
+
+    this.emit('lifepot', player, target);
 };
 
 Game.prototype.useDeath = function useDeath (name, targetName) {
@@ -820,6 +885,33 @@ Game.prototype.useDeath = function useDeath (name, targetName) {
     if (this.deathPotions <= 0) {
         throw new GameError('deathpot_no_potions');
     }
+
+    if (this.usedWitchDeath) {
+        throw new GameError('deathpot_already_used');
+    }
+
+    var target = this.findPlayer(targetName);
+
+    if (!target && targetName != BLANK) {
+        throw new GameError('deathpot_target_not_playing');
+    }
+
+    if (target == player) {
+        throw new GameError('deathpot_target_is_you');
+    }
+
+    if (target) {
+        this.addDeath(target, Game.DEATH_WITCH);
+        this.deathPotions--;
+    }
+
+    this.usedWitchDeath = true;
+
+    if (this.usedWitchLife && this.usedWitchDeath) {
+        this.endTurn(Game.TURN_WITCH);
+    }
+
+    this.emit('deathpot', player, target);
 };
 
 /* ====================== */

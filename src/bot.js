@@ -20,6 +20,9 @@ var aliases = {
     'a': 'attack',
     'v': 'vote',
 
+    'life': 'lifepot',
+    'death': 'deathpot',
+
     'rev': 'revenge',
 }
 
@@ -97,6 +100,7 @@ Bot.prototype.start = function start (version) {
 
     this.game.on('start-turn:' + Game.TURN_WOLVES, this.onGameStartTurnWolves, this);
     this.game.on(  'end-turn:' + Game.TURN_WOLVES, this.onGameEndTurnWolves, this);
+    this.game.on('wolves-victim', this.onGameSelectWolvesVictim, this);
 
     this.game.on('start-turn:' + Game.TURN_DISCUSSION, this.onGameStartTurnDiscussion, this);
     this.game.on(  'end-turn:' + Game.TURN_DISCUSSION, this.onGameEndTurnDiscussion, this);
@@ -106,6 +110,9 @@ Bot.prototype.start = function start (version) {
 
     this.game.on('start-turn:' + Game.TURN_SEER, this.onGameStartTurnSeer, this);
     this.game.on(  'end-turn:' + Game.TURN_SEER, this.onGameEndTurnSeer, this);
+
+    this.game.on('start-turn:' + Game.TURN_WITCH, this.onGameStartTurnWitch, this);
+    this.game.on(  'end-turn:' + Game.TURN_WITCH, this.onGameEndTurnWitch, this);
 
     this.game.on('roles', this.onGameAssignedRoles, this);
 
@@ -344,6 +351,14 @@ Bot.prototype.onCommand = function onCommand (who, where, command, args) {
                 this.game.see(who, args[0]);
             } break;
 
+            /* Use the witch ability */
+            case 'lifepot': {
+                this.game.useLife(who, args[0]);
+            } break;
+            case 'deathpot': {
+                this.game.useDeath(who, args[0]);
+            } break;
+
             /* Command not found */
             default: {
                 this.client.notice(who, 'Invalid command \x02' + command + '\x0f.');
@@ -505,7 +520,6 @@ Bot.prototype.onGameStartTurnWolves = function onGameStartTurnWolves () {
     this.game.getRolePlayers(Game.ROLE_WOLF).forEach(function (wolf) {
         _this.client.send('INVITE', wolf, _this.options.channelWolves);
         _this.client.notice(wolf, 'It\'s time to hunt! Join \x1f' + _this.options.channelWolves + '\x1f to discuss who to attack with the other werewolves');
-
         _this.client.notice(wolf, 'When you\'re ready, vote for attacking by saying \x1f!attack nick\x1f, or \x1f!attack -\x1f to skip vote');
         _this.client.notice(wolf, 'If a tie is reached, a random player from the tie will die!');
     });
@@ -513,6 +527,14 @@ Bot.prototype.onGameStartTurnWolves = function onGameStartTurnWolves () {
 
 Bot.prototype.onGameEndTurnWolves = function onGameEndTurnWolves () {
 
+};
+
+Bot.prototype.onGameSelectWolvesVictim = function onGameSelectWolfVictim (victim) {
+    var _this = this;
+
+    this.game.getRolePlayers(Game.ROLE_WOLF).forEach(function (wolf) {
+        _this.client.notice(wolf, sprintf('The wolves have decided to attack \x02%s\x02!', victim));
+    });
 };
 
 
@@ -552,8 +574,8 @@ Bot.prototype.onGameEndTurnLynching = function onGameEndTurnLynching () {
 Bot.prototype.onGameStartTurnSeer = function onGameStartTurnSeer () {
     var _this = this;
 
-    this.game.getRolePlayers(Game.TURN_SEER).forEach(function (seer) {
-        _this.client.notice(seer, 'Your crystal ball lights up, giving you the chance of knowing the true identity of a villager');
+    this.game.getRolePlayers(Game.ROLE_SEER).forEach(function (seer) {
+        _this.client.notice(seer, sprintf('%s: Your crystal ball lights up, giving you the chance of knowing the true identity of a villager', seer));
         _this.client.notice(seer, sprintf('To reveal the role of a player, write \x1f/msg %1$s !see \x1dnick\x1d\x1f, or \x1f/msg %1$s !see \x1d-\x1d\x1f to skip the turn', _this.client.nick));
         _this.client.notice(seer, sprintf('You have \x02%s\x02 seconds until your crystal ball loses power', Game.TIME_SEER));
     });
@@ -562,8 +584,43 @@ Bot.prototype.onGameStartTurnSeer = function onGameStartTurnSeer () {
 Bot.prototype.onGameEndTurnSeer = function onGameEndTurnSeer () {
     var _this = this;
 
-    this.game.getRolePlayers(Game.TURN_SEER).forEach(function (seer) {
+    this.game.getRolePlayers(Game.ROLE_SEER).forEach(function (seer) {
         _this.client.notice(seer, 'Your crystal ball goes black, you\'ll need to wait a day to use it again');
+    });
+};
+
+
+/* === WITCH === */
+
+Bot.prototype.onGameStartTurnWitch = function onGameStartTurnWitch () {
+    var _this = this;
+
+    this.game.getRolePlayers(Game.ROLE_WITCH).forEach(function (witch) {
+        var victim = _this.game.wolvesVictim;
+
+        _this.client.notice(witch, sprintf('This night, the werewolves attacked \x02%1$s\x02 and killed them', victim));
+
+        _this.client.notice(witch, sprintf('You have \x02\x0303%d\x02 life potion(s)\x0300', _this.game.lifePotions));
+        if (_this.game.lifePotions) {
+            _this.client.notice(witch, sprintf('Use a life potion to revive \x02%1$s\x02 by saying \x1f/msg %2$s !lifepot %1$s\x1f, or skip it with \x1f/msg %2$s !lifepot -\x1f', victim, _this.client.nick));
+        }
+
+        _this.client.notice(witch, sprintf('You have \x02\x0302%d\x02 death potion(s)\x0300', _this.game.deathPotions));
+        if (_this.game.lifePotions) {
+            _this.client.notice(witch, sprintf('Use a death potion to kill anyone by saying \x1f/msg %1$s !deathpot nick\x1f, or skip it with \x1f/msg %1$s !deathpot -\x1f', _this.client.nick));
+        }
+
+        if (_this.game.lifePotions || _this.game.deathPotions) {
+            _this.client.notice(witch, sprintf('You have \x02%1$d\x02 seconds to use your potions', Game.TIME_WITCH));
+        }
+    });
+};
+
+Bot.prototype.onGameEndTurnWitch = function onGameEndTurnWitch () {
+    var _this = this;
+
+    this.game.getRolePlayers(Game.ROLE_WITCH).forEach(function (witch) {
+        _this.client.notice(witch, sprintf('Fearing the werewolves might discover you, you go back to sleep'));
     });
 };
 
@@ -590,9 +647,14 @@ Bot.prototype.onGameDeath = function (player, role, reason) {
                 prefix + 'has been lynched by the town');
         } break;
 
+        case Game.DEATH_WITCH: {
+            this.client.say(this.options.channel,
+                prefix + 'has been found dead, poisoned by the witch!');
+        } break;
+
         default: {
             this.client.say(this.options.channel,
-                prefix + 'has been found dead');
+                prefix + 'has died');
         }
     }
 };
