@@ -80,7 +80,7 @@ Game.ROLE_CUPID     = 'cupid';
 /* === MIN PLAYERS FOR ROLE === */
 Game.PLAYERS_SEER   = 5;
 Game.PLAYERS_WITCH  = 5;
-Game.PLAYERS_HUNTER = 1//6;
+Game.PLAYERS_HUNTER = 6;
 Game.PLAYERS_CUPID  = 7;
 
 /* === ROLE PRIORITY & PLAYERS === */
@@ -109,16 +109,16 @@ Game.TURN_LYNCHING   = 'lynching';
 Game.TURN_SHERIFF    = 'sheriff';
 
 /* === TURN DURATIONS === */
-Game.TIME_JOINING    = 60;
-Game.TIME_ELECTION   = 150;
-Game.TIME_CUPID      = 45;
-Game.TIME_WOLVES     = 60;
-Game.TIME_SEER       = 45;
-Game.TIME_WITCH      = 45;
-Game.TIME_HUNTER     = 30;
-Game.TIME_DISCUSSION = 60;
-Game.TIME_LYNCHING   = 150;
-Game.TIME_SHERIFF    = 30;
+Game.TIME_JOINING    = (config.testing) ? 30 : 60;
+Game.TIME_ELECTION   = (config.testing) ? 30 : 150;
+Game.TIME_CUPID      = (config.testing) ? 30 : 45;
+Game.TIME_WOLVES     = (config.testing) ? 30 : 60;
+Game.TIME_SEER       = (config.testing) ? 20 : 45;
+Game.TIME_WITCH      = (config.testing) ? 20 : 45;
+Game.TIME_HUNTER     = (config.testing) ? 20 : 30;
+Game.TIME_DISCUSSION = (config.testing) ? 15 : 60;
+Game.TIME_LYNCHING   = (config.testing) ? 60 : 150;
+Game.TIME_POSTLYNCH  = (config.testing) ? 20 : 45;
 
 /* === DEATH TYPES === */
 Game.DEATH_WOLVES     = 'wolves';
