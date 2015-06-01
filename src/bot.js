@@ -114,6 +114,9 @@ Bot.prototype.start = function start (version) {
     this.game.on('start-turn:' + Game.TURN_WITCH, this.onGameStartTurnWitch, this);
     this.game.on(  'end-turn:' + Game.TURN_WITCH, this.onGameEndTurnWitch, this);
 
+    this.game.on('start-turn:' + Game.TURN_HUNTER, this.onGameStartTurnHunter, this);
+    this.game.on(  'end-turn:' + Game.TURN_HUNTER, this.onGameEndTurnHunter, this);
+
     this.game.on('roles', this.onGameAssignedRoles, this);
 
     this.game.on('death', this.onGameDeath, this);
@@ -123,6 +126,8 @@ Bot.prototype.start = function start (version) {
     this.game.on('attack', this.onGameAttack, this);
     this.game.on('vote', this.onGameVote, this);
     this.game.on('see', this.onGameSee, this);
+    this.game.on('lifepot', this.onGameLifePot, this);
+    this.game.on('deathpot', this.onGameDeathPot, this);
 };
 
 Bot.prototype.stop = function stop (message) {
@@ -359,6 +364,11 @@ Bot.prototype.onCommand = function onCommand (who, where, command, args) {
                 this.game.useDeath(who, args[0]);
             } break;
 
+            /* Revenge kill */
+            case 'revenge': {
+                this.game.revenge(who, args[0]);
+            } break;
+
             /* Command not found */
             default: {
                 this.client.notice(who, 'Invalid command \x02' + command + '\x0f.');
@@ -491,10 +501,10 @@ Bot.prototype.onGameAssignedRoles = function onGameAssignedRoles () {
 
     /* Inform everyone of the roles of the town */
     this.client.say(this.options.channel,
-        'The town of \x02' + this.game.townName + '\x02 has \x02' + this.game.players.length + '\x02 inhabitants:');
+        'The town of \x02' + this.game.townName + '\x02 has \x02' + this.game.alivePlayers.length + '\x02 inhabitants:');
 
     /* Inform of every player */
-    utils.joinWithMax(this.game.players, '\x02, \x02', 80).forEach(function (line) {
+    utils.joinWithMax(this.game.alivePlayers, '\x02, \x02', 80).forEach(function (line) {
         _this.client.say(_this.options.channel, '\x02' + line + '\x02');
     });
 
@@ -542,7 +552,7 @@ Bot.prototype.onGameStartTurnDiscussion = function onGameStartTurnDiscussion () 
     var _this = this;
 
     /* Give voice to anyone still alive */
-    this.game.players.forEach(function (user) {
+    this.game.alivePlayers.forEach(function (user) {
         if (user != _this.client.nick) {
             _this.client.send('MODE', _this.options.channel, '+v', user);
         }
@@ -605,7 +615,7 @@ Bot.prototype.onGameStartTurnWitch = function onGameStartTurnWitch () {
             _this.client.notice(witch, sprintf('Use a life potion to revive \x02%1$s\x02 by saying \x1f/msg %2$s !lifepot %1$s\x1f, or skip it with \x1f/msg %2$s !lifepot -\x1f', victim, _this.client.nick));
         }
 
-        _this.client.notice(witch, sprintf('You have \x02\x0302%d\x02 death potion(s)\x0300', _this.game.deathPotions));
+        _this.client.notice(witch, sprintf('You have \x02\x0305%d\x02 death potion(s)\x0300', _this.game.deathPotions));
         if (_this.game.lifePotions) {
             _this.client.notice(witch, sprintf('Use a death potion to kill anyone by saying \x1f/msg %1$s !deathpot nick\x1f, or skip it with \x1f/msg %1$s !deathpot -\x1f', _this.client.nick));
         }
@@ -624,12 +634,36 @@ Bot.prototype.onGameEndTurnWitch = function onGameEndTurnWitch () {
     });
 };
 
+Bot.prototype.onGameLifePot = function (witch, target) {
+    if (target) {
+        this.client.say(witch, sprintf('You\'ve used a \x0303life potion\x0300 on \x02%1$s\x02', target));
+    }
+};
 
+Bot.prototype.onGameDeathPot = function (witch, target) {
+    if (target) {
+        this.client.say(witch, sprintf('You\'ve used a \x0305death potion\x0300 on \x02%1$s\x02', target));
+    }
+};
+
+
+/* === HUNTER === */
+
+Bot.prototype.onGameStartTurnHunter = function onGameStartTurnHunter () {
+    this.client.notice(this.game.activeHunter, sprintf('%1$s: As the hunter, you can avenge your own death by killing someone with your last breath', this.game.activeHunter));
+    this.client.notice(this.game.activeHunter, sprintf('Select who to kill using \x1f/msg %1$s !revenge nick\x1f', this.client.nick));
+};
+
+Bot.prototype.onGameEndTurnHunter = function onGameEndTurnHunter () {
+    
+};
 
 
 Bot.prototype.onGameDeath = function (player, role, reason) {
     var prefix = ((role == Game.ROLE_WOLF) ? '\x0303' : '\x0304')
         + '\x02' + player + '\x02, the \x02' + role + '\x02, ';
+
+    this.client.send('MODE', this.options.channel, '-v', player);
 
     switch (reason) {
         case Game.DEATH_DISAPPEAR: {
@@ -654,7 +688,7 @@ Bot.prototype.onGameDeath = function (player, role, reason) {
 
         default: {
             this.client.say(this.options.channel,
-                prefix + 'has died');
+                prefix + 'has died (' + reason + ')');
         }
     }
 };

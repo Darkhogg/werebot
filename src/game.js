@@ -48,6 +48,8 @@ var Game = function Game () {
 
     this.on('start-turn:' + Game.TURN_Witch, this.onStartTurnWitch, this);
     this.on(  'end-turn:' + Game.TURN_Witch, this.onEndTurnWitch, this);
+
+    this.on('death', this.onDeath, this);
 };
 
 var GameError = Game.Error = function GameError (message) {
@@ -77,9 +79,9 @@ Game.ROLE_CUPID     = 'cupid';
 
 /* === MIN PLAYERS FOR ROLE === */
 Game.PLAYERS_SEER   = 5;
-Game.PLAYERS_WITCH  = 1//6;
-Game.PLAYERS_HUNTER = 7;
-Game.PLAYERS_CUPID  = 6;
+Game.PLAYERS_WITCH  = 5;
+Game.PLAYERS_HUNTER = 1//6;
+Game.PLAYERS_CUPID  = 7;
 
 /* === ROLE PRIORITY & PLAYERS === */
 Game.ROLEPLAYERS = [
@@ -123,6 +125,7 @@ Game.DEATH_WOLVES     = 'wolves';
 Game.DEATH_LYNCH      = 'lynch';
 Game.DEATH_DISAPPEAR  = 'disappear';
 Game.DEATH_WITCH      = 'witch';
+Game.DEATH_HUNTER     = 'hunter';
 
 /* === GAME SIDES === */
 Game.SIDE_NOBODY = 'nobody';
@@ -142,6 +145,19 @@ Game.DEFAULT_SIDES[Game.ROLE_WOLF] = Game.SIDE_WOLVES;
 
 /* =========================== */
 /* === INFORMATION GETTERS === */
+
+Game.prototype.findAlivePlayer = function findAlivePlayer (player) {
+    if (!this.alivePlayers) {
+        return null;
+    }
+
+    var idx = this.alivePlayers.indexOf(player);
+    if (idx < 0) {
+        return null;
+    }
+
+    return this.alivePlayers[idx];
+};
 
 Game.prototype.findPlayer = function findPlayer (player) {
     if (!this.players) {
@@ -190,12 +206,37 @@ Game.prototype.countRolePlayers = function countRolePlayers (role) {
     return this.getRolePlayers(role).length;
 };
 
+Game.prototype.getPlayerSides = function getPlayerSides (name) {
+    var player = this.findPlayer(name);
+
+    if (!player) {
+        return [];
+    }
+
+    if (!this.sides || !this.sides[player]) {
+        return [];
+    }
+
+    return this.sides[player];
+};
+
+Game.prototype.getSidePlayers = function getSidePlayers (role) {
+    if (!this.sidePlayers || !this.sidePlayers[role]) {
+        return [];
+    }
+
+    return this.sidePlayers[role];
+};
+
 Game.prototype.checkVictory = function checkVictory () {
     /* Victory already set */
     if (this.winningSide) {
         return true;
     }
 
+    logger.silly('Players: %s;  Wolves: %s', this.players.length, this.countRolePlayers(Game.ROLE_WOLF));
+
+    /* Check if victory is possible */
     if (this.players.length == 0) {
         this.winningSide = Game.SIDE_NOBODY;
         return true;
@@ -209,18 +250,31 @@ Game.prototype.checkVictory = function checkVictory () {
         return true;
     }
 
+    /* No victory */
     return false;
 };
 
+Game.prototype.performVictory = function performVictory () {
+    if (this.checkVictory()) {
+        logger.debug('Winning side: ' + this.winningSide);
+        return this.endGame();
+    }
+
+    logger.silly('No wins yet...');
+}
+
 Game.prototype.nickChanged = function nickChanged (oldNick, newNick) {
     /* When a nick changes, we need to:
-       - Change it on the list of players
+       - Change it on the list of players and alivePlayers
        - Change it on its role list
        - Modify the entry on the roles map
+       - Change it on its side list
+       - Modify the entry on the sides map
     */
 
     if (this.running && this.players.indexOf(oldNick) >= 0) {
         this.players[this.players.indexOf(oldNick)] = newNick;
+        this.alivePlayers[this.alivePlayers.indexOf(oldNick)] = newNick;
 
         if (this.roles[oldNick]) {
             var rolePlayersNick = this.rolePlayers[this.roles[oldNick]];
@@ -233,11 +287,11 @@ Game.prototype.nickChanged = function nickChanged (oldNick, newNick) {
 };
 
 Game.prototype.playerLeft = function playerLeft (player) {
-    if (this.running && this.players.indexOf(player) >= 0) {
+    if (this.running && this.alivePlayers.indexOf(player) >= 0) {
         if (this.isTurn(Game.TURN_JOINING)) {
-            this.players.splice(this.players.indexOf(player));
+            this.alivePlayers.splice(this.alivePlayers.indexOf(player));
 
-            this._emit('leave', player, this.players.length);
+            this._emit('leave', player, this.alivePlayers.length);
         } else {
             this.addDeath(player, Game.DEATH_DISAPPEAR, this.isPhase(Game.PHASE_DAYTIME));
         }
@@ -257,6 +311,7 @@ Game.prototype.startGame = function startGame () {
 
     this.deaths = [];
     this.players = [];
+    this.alivePlayers = [];
 
     this.roles = {};
     this.rolePlayers = {};
@@ -284,6 +339,8 @@ Game.prototype.endGame = function endGame () {
     this._interval = null;
 
     this.running = false;
+    this.players = [];
+    this.alivePlayers = []
 
     this._emit('end-game');
 };
@@ -364,6 +421,9 @@ Game.prototype.assignRoles = function assignRoles () {
     var randPlayers = _.shuffle(this.players);
     var randRoles   = _.shuffle(roles);
 
+    logger.silly('Players: ', randPlayers.join(', '));
+    logger.silly('Roles: ', randRoles.join(', '));
+
     /* Assign a role to each player, in "order" */
     for (var i in randPlayers) {
         var player = randPlayers[i];
@@ -442,12 +502,13 @@ Game.prototype.applyDeaths = function applyDeaths () {
         var death = this.deaths.shift();
         this.performDeath(death);
     }
-}
+
+};
 
 Game.prototype.performDeath = function performDeath (death) {
     var player = death.player;
 
-    if (this.players.indexOf(player) < 0) {
+    if (this.alivePlayers.indexOf(player) < 0) {
         return;
     }
 
@@ -456,13 +517,31 @@ Game.prototype.performDeath = function performDeath (death) {
     logger.verbose('%s [%s] dies (%s)', player, role, death.reason);
 
     /* Remove the player from the role and player lists */
-    this.players.splice(this.players.indexOf(player), 1);
-    this.rolePlayers[role].splice(this.rolePlayers[role].indexOf(player), 1);
-    this.roles[player] = null;
+    this.alivePlayers.splice(this.alivePlayers.indexOf(player), 1);
 
     /* Emit the appropriate event */
     this._emit('death', player, role, death.reason);
-}
+};
+
+Game.prototype.finishDeath = function finishDeath (player) {
+    var _this = this;
+
+    var role = this.getPlayerRole(player);
+    var sides = this.getPlayerSides(player);
+
+    /* Empty the roles... */
+    this.roles[player] = null;
+    this.rolePlayers[role].splice(this.rolePlayers[role].indexOf(player));
+
+    /* Empty the sides... */
+    this.sides[player] = [];
+    sides.forEach(function (side) {
+        _this.sidePlayers[side].splice(_this.sidePlayers[side].indexOf(player));
+    });
+
+    /* Remove from players... */
+    this.players.splice(this.players.indexOf(player), 1);
+};
 
 /* ======================= */
 /* === GAME MANAGEMENT === */
@@ -470,8 +549,6 @@ Game.prototype.performDeath = function performDeath (death) {
 Game.prototype.onTick = function onTick () {
     var _this = this;
     var now = Date.now();
-
-    logger.silly('Phase "%s", Turns ["%s"]', this.phase, this.activeTurns.join('", "'))
 
     /* If there's no current phase, finish the game */
     if (!this.phase) {
@@ -501,7 +578,7 @@ Game.prototype.onStartPhasePreparation = function onStartPhasePreparation () {
 };
 
 Game.prototype.onEndPhasePreparation = function onEndPhasePreparation () {
-    if (this.players.length >= Game.MIN_PLAYERS) {
+    if (this.alivePlayers.length >= Game.MIN_PLAYERS) {
         this.startPhase(Game.PHASE_NIGHTTIME);
     }
 };
@@ -509,6 +586,8 @@ Game.prototype.onEndPhasePreparation = function onEndPhasePreparation () {
 
 Game.prototype.onStartPhaseNight = function onStartPhaseNight () {
     this.applyDeaths();
+
+    //this.performVictory();
 
     this.startTurn(Game.TURN_WOLVES, Game.TIME_WOLVES);
 
@@ -526,12 +605,9 @@ Game.prototype.onEndPhaseNight = function onStartPhaseNight () {
 Game.prototype.onStartPhaseDay = function onStartPhaseDay () {
     this.applyDeaths();
 
-    if (this.checkVictory()) {
-        this.endGame();
+    //this.performVictory();
 
-    } else {
-        this.startTurn(Game.TURN_DISCUSSION, Game.TIME_DISCUSSION);
-    }
+    this.startTurn(Game.TURN_DISCUSSION, Game.TIME_DISCUSSION);
 };
 
 Game.prototype.onEndPhaseDay = function onStartPhaseDay () {
@@ -539,12 +615,9 @@ Game.prototype.onEndPhaseDay = function onStartPhaseDay () {
         this.addDeath(this.lynchVictim, Game.DEATH_LYNCH, true);
     }
 
-    if (this.checkVictory()) {
-        this.endGame();
+    //this.performVictory();
 
-    } else {
-        this.startPhase(Game.PHASE_NIGHTTIME);
-    }
+    this.startPhase(Game.PHASE_NIGHTTIME);
 };
 
 
@@ -552,8 +625,10 @@ Game.prototype.onStartTurnJoining = function onStartTurnJoining () {
 };
 
 Game.prototype.onEndTurnJoining = function onEndTurnJoining () {
-    if (this.players.length >= Game.MIN_PLAYERS) {
+    if (this.alivePlayers.length >= Game.MIN_PLAYERS) {
         this.assignRoles();
+
+        // TODO Election
     }
 };
 
@@ -570,7 +645,7 @@ Game.prototype.onEndTurnWolves = function onEndTurnWolves () {
 
     var victims = utils.mostVotedMulti(this.attackVictims);
     if (victims.length == 0) {
-        victims = this.players.filter(function (player) {
+        victims = this.alivePlayers.filter(function (player) {
             return _this.getRolePlayers(Game.ROLE_WOLF).indexOf(player) < 0;
         });
     }
@@ -629,7 +704,33 @@ Game.prototype.onEndTurnLynching = function onEndTurnLynching () {
     this.lynchVictim = utils.mostVoted(this.lynchVictims);
 };
 
+Game.prototype.onStartTurnHunter = function onStartTurnHunter () {
 
+};
+
+Game.prototype.onEndTurnHunter = function onEndTurnHunter () {
+    this.finishDeath(this.activeHunter);
+};
+
+
+
+
+Game.prototype.onDeath = function onDeath (player) {
+    var role = this.getPlayerRole(player);
+
+    if (role == Game.ROLE_HUNTER) {
+        /* The hunter is not finished yet: A hunter turn starts, the hunter
+         * uses !revenge, and he dies AFTER the turn ends
+         */
+
+        this.activeHunter = player;
+        return this.startTurn(Game.TURN_HUNTER, Game.TIME_HUNTER);
+    }
+
+    this.finishDeath(player);
+
+    this.performVictory();
+};
 
 /* ================== */
 /* === PLAYER ACTIONS */
@@ -646,7 +747,8 @@ Game.prototype.play = function play (name) {
     this.startGame();
 
     this.players.push(name);
-    this._emit('join', name, this.players.length);
+    this.alivePlayers.push(name);
+    this._emit('join', name, this.alivePlayers.length);
 };
 
 Game.prototype.join = function join (name) {
@@ -665,7 +767,8 @@ Game.prototype.join = function join (name) {
     logger.verbose('JOIN("%s")', name);
 
     this.players.push(name);
-    this._emit('join', name, this.players.length);
+    this.alivePlayers.push(name);
+    this._emit('join', name, this.alivePlayers.length);
 };
 
 Game.prototype.attack = function attack (name, victimName) {
@@ -775,7 +878,7 @@ Game.prototype.lynch = function (name, targetName) {
     this._emit('vote', player, target);
 
     /* If everyone has voted, end the turn */
-    if (this.lynchTotalVotes >= this.players.length) {
+    if (this.lynchTotalVotes >= this.alivePlayers.length) {
         this.endTurn(Game.TURN_LYNCHING);
     }
 };
@@ -853,6 +956,8 @@ Game.prototype.useLife = function useLife (name, targetName) {
         throw new GameError('lifepot_not_attacked');
     }
 
+    /* --- Everything OK --- */
+
     if (target) {
         this.removeDeath(target, Game.DEATH_WOLVES);
         this.lifePotions--;
@@ -900,6 +1005,8 @@ Game.prototype.useDeath = function useDeath (name, targetName) {
         throw new GameError('deathpot_target_is_you');
     }
 
+    /* --- Everything OK --- */
+
     if (target) {
         this.addDeath(target, Game.DEATH_WITCH);
         this.deathPotions--;
@@ -913,6 +1020,44 @@ Game.prototype.useDeath = function useDeath (name, targetName) {
 
     this.emit('deathpot', player, target);
 };
+
+Game.prototype.revenge = function revenge (name, targetName) {
+    var player = this.findPlayer(name);
+
+    if (!player) {
+        throw new GameError('player_not_playing');
+    }
+
+    if (this.getPlayerRole(player) != Game.ROLE_HUNTER) {
+        throw new GameError('revenge_not_hunter');
+    }
+
+    if (player != this.activeHunter) {
+        throw new GameError('revenge_not_recently_dead');
+    }
+
+    if (!this.isTurn(Game.TURN_HUNTER)) {
+        throw new GameError('deathpot_not_in_turn');
+    }
+
+    var target = this.findPlayer(targetName);
+
+    if (!target && targetName != BLANK) {
+        throw new GameError('deathpot_target_not_playing');
+    }
+
+    if (target == player) {
+        throw new GameError('deathpot_target_is_you');
+    }
+
+    /* --- Everything OK --- */
+
+    if (target) {
+        this.addDeath(target, Game.DEATH_HUNTER, true);
+    }
+
+    this.endTurn(Game.TURN_HUNTER);
+}
 
 /* ====================== */
 /* === MODULE EXPORTS === */
