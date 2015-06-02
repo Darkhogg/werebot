@@ -4,6 +4,8 @@ var crashit = require('crashit');
 var irc     = require('irc');
 var sprintf = require('sprintf-js').sprintf;
 
+var nickserv = require('>/modules/nickserv');
+
 var logger = require('>/common/logger');
 var config = require('>/common/config');
 var utils  = require('>/common/utils');
@@ -51,12 +53,6 @@ Bot.prototype.start = function start (version) {
             realName: 'Werebot v' + version
         }
     );
-
-    this.client.once('registered', function () {
-        logger.info('Bot connected');
-
-        _this.recoverNick();
-    });
 
     this.client.once('motd', function (motd) {
         _this.recoverGameChannel();
@@ -128,6 +124,8 @@ Bot.prototype.start = function start (version) {
     this.game.on('see', this.onGameSee, this);
     this.game.on('lifepot', this.onGameLifePot, this);
     this.game.on('deathpot', this.onGameDeathPot, this);
+
+    this.nickserv = nickserv(this.client, this.options.nick, this.options.nickservPassword);
 };
 
 Bot.prototype.stop = function stop (message) {
@@ -138,16 +136,7 @@ Bot.prototype.stop = function stop (message) {
     this.client.disconnect(message);
 };
 
-Bot.prototype.recoverNick = function (force) {
-    this.client.send('NICK', this.options.nick);
-
-    if (this.options.nickservPassword) {
-        logger.verbose('Registering with NickServ...');
-        this.client.say('NickServ', 'IDENTIFY ' + this.options.nickservPassword);
-    }
-};
-
-Bot.prototype.recoverGameChannel = function () {
+Bot.prototype.recoverGameChannel = function recoverGameChannel () {
     this.client.join(this.options.channel);
     this.client.say('ChanServ', sprintf('INVITE %s', this.options.channel));
 }
@@ -160,10 +149,6 @@ Bot.prototype.recoverWolvesChannel = function () {
 Bot.prototype.resetChannel = function () {
     this.client.send('MODE', this.options.channel, '+t-m');
     this.client.say('ChanServ', 'SYNC ' + this.options.channel);
-};
-
-Bot.prototype.checkRegistered = function (who) {
-    this.client.say('NickServ', 'STATUS ' + who);
 };
 
 Bot.prototype.onInvite = function onInvite (channel, from, msg) {
@@ -184,12 +169,6 @@ Bot.prototype.onJoin = function onJoin (channel, who, msg) {
     }
 
     this.names[channel].push(who);
-
-    this.checkRegistered(who);
-
-    if (who == this.client.nick) {
-        this.names[this.options.channel].forEach(this.checkRegistered.bind(this));
-    }
 };
 
 Bot.prototype.onPart = function onJoin (channel, who, msg) {
@@ -272,14 +251,6 @@ Bot.prototype.onSubMode = function (channel, by, mode, argument, msg) {
 
 Bot.prototype.onNotice = function onNotice (from, to, text, msg) {
     logger.silly('[ NOTICE] %s %s: ', from, to, text);
-
-    if (from == 'NickServ' && text.indexOf('STATUS') == 0) {
-        var parts = text.substring(1).split(/\s+/);
-        var who = parts[1];
-        var num = parseInt(parts[2]);
-
-        this.isRegistered[who] = (num >= 2);
-    }
 };
 
 Bot.prototype.onNames = function onNames (channel, nicks) {
@@ -386,13 +357,15 @@ Bot.prototype.onCommand = function onCommand (who, where, command, args) {
 /* === GAME EVENT HANDLERS === */
 
 Bot.prototype.onGameStartGame = function onGameStartGame () {
-    this.recoverNick();
-    this.recoverWolvesChannel();
+    var _this = this;
+
+    this.nickserv.recover().then(function () {
+        console.log('RECOVER')
+        _this.recoverWolvesChannel();
+    });
 
     this.client.notice(this.options.channel,
         'A new game is about to start!');
-
-    this.names[this.options.channel].forEach(this.checkRegistered.bind(this));
 };
 
 Bot.prototype.onGameEndGame = function onGameEndGame () {
