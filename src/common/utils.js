@@ -79,3 +79,12 @@ module.exports.randomRange = function randomRange (min_, max_, step_) {
 
     return step * Math.floor((min + Math.random() * (max - min)) / step);
 }
+
+module.exports.format = function format (string) {
+    return string
+        .replace(/\^R/g, '\x0f')
+        .replace(/\^B/g, '\x02')
+        .replace(/\^K/g, '\x03')
+        .replace(/\^U/g, '\x1f')
+        .replace(/\^I/g, '\x1d');
+}

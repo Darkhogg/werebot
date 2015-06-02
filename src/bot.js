@@ -45,6 +45,7 @@ Bot.prototype.start = function start (version) {
         this.options.nick,
         {
             //debug: true,
+            autoConnect: false,
             channels: [],
             secure: true,
             selfSigned: true,
@@ -53,6 +54,14 @@ Bot.prototype.start = function start (version) {
             realName: 'Werebot v' + version
         }
     );
+
+    this.client.once('abort', function () {
+        crashit.crash(1);
+    });
+
+    this.client.once('netError', function (err) {
+        crashit.crash(err);
+    });
 
     this.client.once('motd', function (motd) {
         _this.recoverGameChannel();
@@ -126,6 +135,10 @@ Bot.prototype.start = function start (version) {
     this.game.on('deathpot', this.onGameDeathPot, this);
 
     this.nickserv = nickserv(this.client, this.options.nick, this.options.nickservPassword);
+
+    this.client.connect(1, function (msg) {
+        this._connected = true;
+    });
 };
 
 Bot.prototype.stop = function stop (message) {
@@ -147,8 +160,10 @@ Bot.prototype.recoverWolvesChannel = function () {
 };
 
 Bot.prototype.resetChannel = function () {
-    this.client.send('MODE', this.options.channel, '+t-m');
-    this.client.say('ChanServ', 'SYNC ' + this.options.channel);
+    if (this._connected) {
+        this.client.send('MODE', this.options.channel, '+t-m');
+        this.client.say('ChanServ', sprintf('SYNC %s', this.options.channel));
+    }
 };
 
 Bot.prototype.onInvite = function onInvite (channel, from, msg) {
