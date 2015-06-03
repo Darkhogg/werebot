@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import sys
+import requests
 
 def read_lines(fname):
     with open(fname) as f:
@@ -10,18 +11,37 @@ def write_lines(fname, lines):
     with open(fname, 'w') as f:
         f.writelines(lines)
 
+def obtain_words(howmany):
+    returned = 0
+
+    try:
+        while returned < howmany:
+            newNameStr = requests.get('http://www.namegenerator.biz/application/p.php?type=1&id=place_names&spaceflag=false')
+            words = filter(bool, newNameStr.text.split(','));
+
+            for word in words:
+                yield word
+                returned += 1
+
+            print(returned, '/', howmany, ' - ', returned / howmany)
+
+    except KeyboardInterrupt:
+        print('\rStopped!')
+
+
+
 leftFile = sys.argv[1]
 rightFile = sys.argv[2]
-newFile = sys.argv[3]
+howmany = int(sys.argv[3])
 
 leftWords = list(map(str.strip, read_lines(leftFile)))
 rightWords = list(map(str.strip, read_lines(rightFile)))
-newWords = list(map(str.strip, read_lines(newFile)))
+noMatch = []
 
 newLefts = 0
 newRights = 0
 
-for word in newWords:
+for word in obtain_words(howmany):
     word = word.strip()
 
     matchleft = False
@@ -42,15 +62,20 @@ for word in newWords:
         leftWords.append(other)
         newLefts += 1
 
+        print('L:', other)
+
     # Matches left, not right
     if matchleft and not matchright:
         other = word[len(matchleft):]
         rightWords.append(other)
         newRights += 1
 
-    # No match at all
+        print('R:', other)
+
     if not matchleft and not matchright:
-        print(word, 'NONE')
+        noMatch.append(wordd)
+
+        print('N:', word)
 
 print('Found {} new left words'.format(newLefts))
 write_lines(leftFile, map(lambda x: x+'\n', sorted(leftWords)))
@@ -58,3 +83,6 @@ write_lines(leftFile, map(lambda x: x+'\n', sorted(leftWords)))
 
 print('Found {} new right words'.format(newRights))
 write_lines(rightFile, map(lambda x: x+'\n', sorted(rightWords)))
+
+print('Found {} unsplitted words'.format(len(noMatch)))
+print(', '.join(noMatch))
