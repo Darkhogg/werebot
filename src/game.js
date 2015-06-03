@@ -498,7 +498,17 @@ Game.prototype.assignRoles = function assignRoles () {
     // TODO Thief
 
     /* Emit the apprpriate event */
-    this._emit('roles');
+    this._emit('assigned');
+
+    _.forEach(this.roles, function (role, player) {
+        _this.emit('role', player, role);
+    });
+
+    _.forEach(this.sides, function (sides, player) {
+        sides.forEach(function (side) {
+            _this.emit('side', player, side);
+        })
+    });
 };
 
 Game.prototype.addDeath = function addDeath (who, why, direct) {

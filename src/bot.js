@@ -122,7 +122,9 @@ Bot.prototype.start = function start (version) {
     this.game.on('start-turn:' + Game.TURN_HUNTER, this.onGameStartTurnHunter, this);
     this.game.on(  'end-turn:' + Game.TURN_HUNTER, this.onGameEndTurnHunter, this);
 
-    this.game.on('roles', this.onGameAssignedRoles, this);
+    this.game.on('assigned', this.onGameAssignedRoles, this);
+    this.game.on('role', this.onGameRole, this);
+    this.game.on('side', this.onGameSide, this);
 
     this.game.on('death', this.onGameDeath, this);
 
@@ -488,26 +490,32 @@ Bot.prototype.onGameAssignedRoles = function onGameAssignedRoles () {
 
     /* Inform everyone of the roles of the town */
     this.client.say(this.options.channel,
-        'The town of \x02' + this.game.townName + '\x02 has \x02' + this.game.alivePlayers.length + '\x02 inhabitants:');
+        'The town of \x02' + this.game.townName + '\x02 has \x02' + this.game.alivePlayers.length + '\x02 inhabitants');
+};
 
-    /* Inform of every player */
-    utils.joinWithMax(this.game.alivePlayers, '\x02, \x02', 80).forEach(function (line) {
-        _this.client.say(_this.options.channel, '\x02' + line + '\x02');
-    });
+Bot.prototype.onGameRole = function onGameRole (player, role) {
+    this.client.notice(player, player + ': You are a \x1f\x02' + role + '\x02\x1f');
+};
 
-    /* Announce the role of the players */
-    _.forEach(this.game.rolePlayers, function (players, role) {
-        _this.client.say(_this.options.channel,
-            '- \x1f' + role + '\x1f: \x02' + players.length + '\x02 ' + (players.length > 1 ? 'people' : 'person'));
-    });
+Bot.prototype.onGameSide = function onGameSide (player, side) {
+    switch (side) {
+        /* Town Side */
+        case Game.SIDE_TOWN: {
+            this.client.notice(player, sprintf('%1$s:\x0f\x0303 You side with \x02the town\x02', player));
+            this.client.notice(player, sprintf('%1$s:\x0f\x0303 In order to win, you have to kill all the werewolves', player));
+        } break;
 
-    _.forEach(this.game.roles, function (role, player) {
-        _this.client.notice(player, player + ': You are a \x1f\x02' + role + '\x02\x1f');
+        /* Wolves Side */
+        case Game.SIDE_WOLVES: {
+            this.client.notice(player, sprintf('%1$s:\x0f\x0305 You side with \x02the werewolves\x02', player));
+            this.client.notice(player, sprintf('%1$s:\x0f\x0305 In order to win, you have to kill anyone that\'s not a werewolf', player));
+        } break;
+    }
 
-        if (role == Game.ROLE_WOLF) {
-            _this.client.notice(player, 'The werewolves are: \x02' + _this.game.getRolePlayers(Game.ROLE_WOLF).join('\x02, \x02'));
-        }
-    });
+    // TODO: If player is a werewolf (not necessarily in the werewolv side)
+    if (side == Game.SIDE_WOLVES) {
+        this.client.notice(player, sprintf('%1$s:\x0f\x0305 The werewolves are: \x02%2$s\x02', player, this.game.getRolePlayers(Game.ROLE_WOLF).join('\x02, \x02')));
+    }
 };
 
 
