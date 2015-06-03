@@ -137,7 +137,7 @@ Bot.prototype.start = function start (version) {
     this.nickserv = nickserv(this.client, this.options.nick, this.options.nickservPassword);
 
     this.client.connect(1, function (msg) {
-        this._connected = true;
+        _this._connected = true;
     });
 };
 
@@ -375,7 +375,6 @@ Bot.prototype.onGameStartGame = function onGameStartGame () {
     var _this = this;
 
     this.nickserv.recover().then(function () {
-        console.log('RECOVER')
         _this.recoverWolvesChannel();
     });
 

@@ -78,17 +78,33 @@ Game.ROLE_HUNTER    = 'hunter';
 Game.ROLE_CUPID     = 'cupid';
 
 /* === MIN PLAYERS FOR ROLE === */
-Game.PLAYERS_SEER   = 5;
-Game.PLAYERS_WITCH  = 5;
-Game.PLAYERS_HUNTER = 6;
-Game.PLAYERS_CUPID  = 7;
+Game.PLAYERS_SEER = [
+    { 'players': 5, 'probability': 0.75 },
+    { 'players': 6, 'probability': 0.95 },
+];
+Game.PLAYERS_WITCH = [
+    { 'players': 5, 'probability': 0.45 },
+    { 'players': 6, 'probability': 0.70 },
+    { 'players': 7, 'probability': 0.95 },
+];
+Game.PLAYERS_HUNTER = [
+    { 'players': 5, 'probability': 0.35 },
+    { 'players': 6, 'probability': 0.55 },
+    { 'players': 7, 'probability': 0.75 },
+    { 'players': 8, 'probability': 0.95 },
+];
+Game.PLAYERS_CUPID = [
+    { 'players': 5, 'probability': 0.35 },
+    { 'players': 6, 'probability': 0.65 },
+    { 'players': 7, 'probability': 0.95 },
+];
 
 /* === ROLE PRIORITY & PLAYERS === */
 Game.ROLEPLAYERS = [
-    { 'role': Game.ROLE_SEER,   'players': Game.PLAYERS_SEER },
-    { 'role': Game.ROLE_WITCH,  'players': Game.PLAYERS_WITCH },
-    { 'role': Game.ROLE_HUNTER, 'players': Game.PLAYERS_HUNTER },
-    { 'role': Game.ROLE_CUPID,  'players': Game.PLAYERS_CUPID },
+    { 'role': Game.ROLE_SEER,   'chances': Game.PLAYERS_SEER },
+    { 'role': Game.ROLE_WITCH,  'chances': Game.PLAYERS_WITCH },
+    { 'role': Game.ROLE_HUNTER, 'chances': Game.PLAYERS_HUNTER },
+    { 'role': Game.ROLE_CUPID,  'chances': Game.PLAYERS_CUPID },
 ];
 
 /* === GAME PHASES === */
@@ -348,11 +364,13 @@ Game.prototype.endGame = function endGame () {
 Game.prototype.startPhase = function startPhase (phase) {
     var now = Date.now();
 
-    this.phase = phase;
-    this.phaseEndTime = now + 5000;
+    if (this.running) {
+        this.phase = phase;
+        this.phaseEndTime = now + 5000;
 
-    this._emit('start-phase', phase);
-    this._emit('start-phase:' + phase);
+        this._emit('start-phase', phase);
+        this._emit('start-phase:' + phase);
+    }
 };
 
 Game.prototype.endPhase = function endPhase () {
@@ -366,11 +384,13 @@ Game.prototype.endPhase = function endPhase () {
 Game.prototype.startTurn = function startTurn (turn, time) {
     var now = Date.now();
 
-    this.activeTurns.push(turn);
-    this.turnEndTimes[turn] = now + time * 1000;
+    if (this.running) {
+        this.activeTurns.push(turn);
+        this.turnEndTimes[turn] = now + time * 1000;
 
-    this._emit('start-turn', turn);
-    this._emit('start-turn:' + turn);
+        this._emit('start-turn', turn);
+        this._emit('start-turn:' + turn);
+    }
 };
 
 Game.prototype.endTurn = function endTurn (turn, when) {
@@ -380,6 +400,8 @@ Game.prototype.endTurn = function endTurn (turn, when) {
 };
 
 Game.prototype.assignRoles = function assignRoles () {
+    var _this = this;
+
     this.assignedRoles = true;
 
     this.existingRoles = [];
@@ -407,7 +429,18 @@ Game.prototype.assignRoles = function assignRoles () {
     for (var i = 0; i < Game.ROLEPLAYERS.length && roles.length < numRoles; i++) {
         var rolespec = Game.ROLEPLAYERS[i];
 
-        if (this.players.length >= rolespec.players) {
+        var probability = (config.testing) ? 0.25 : 0.00;
+
+        /* Find out the probabilidy */
+        rolespec.chances.forEach(function (chance) {
+            console.log(chance)
+            if (_this.players.length >= chance.players) {
+                probability = Math.max(probability, chance.probability);
+            }
+        });
+
+        /* If the role gets randomly selected */
+        if (Math.random() < probability) {
             roles.push(rolespec.role);
         }
     }
@@ -587,7 +620,7 @@ Game.prototype.onEndPhasePreparation = function onEndPhasePreparation () {
 Game.prototype.onStartPhaseNight = function onStartPhaseNight () {
     this.applyDeaths();
 
-    //this.performVictory();
+    this.performVictory();
 
     this.startTurn(Game.TURN_WOLVES, Game.TIME_WOLVES);
 
@@ -605,7 +638,7 @@ Game.prototype.onEndPhaseNight = function onStartPhaseNight () {
 Game.prototype.onStartPhaseDay = function onStartPhaseDay () {
     this.applyDeaths();
 
-    //this.performVictory();
+    this.performVictory();
 
     this.startTurn(Game.TURN_DISCUSSION, Game.TIME_DISCUSSION);
 };
@@ -615,7 +648,7 @@ Game.prototype.onEndPhaseDay = function onStartPhaseDay () {
         this.addDeath(this.lynchVictim, Game.DEATH_LYNCH, true);
     }
 
-    //this.performVictory();
+    this.performVictory();
 
     this.startPhase(Game.PHASE_NIGHTTIME);
 };
