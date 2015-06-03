@@ -2,6 +2,7 @@ Ael
 Ald
 Ash
 Barrow
+Bay
 Beach
 Beech
 Bel
@@ -10,6 +11,7 @@ Blue
 Bridge
 Bright
 Brook
+Bush
 Butter
 By
 Castle
@@ -28,6 +30,7 @@ Drac
 Dragon
 East
 Edge
+Elf
 Ester
 Fair
 Falcon
@@ -43,6 +46,7 @@ Gold
 Grass
 Green
 Grey
+Griffin
 Hedge
 High
 Ice
@@ -80,6 +84,7 @@ Rock
 Rose
 Sage
 Sea
+Shade
 Shadow
 Shore
 Silver
@@ -92,6 +97,7 @@ Stone
 Strong
 Summer
 Swyn
+Val
 Vert
 Violet
 Water
@@ -105,3 +111,4 @@ Wind
 Winter
 Wolf
 Wood
+Wyvern
