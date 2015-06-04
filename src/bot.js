@@ -380,8 +380,15 @@ Bot.prototype.onGameStartGame = function onGameStartGame () {
         _this.recoverWolvesChannel();
     });
 
-    this.client.notice(this.options.channel,
-        'A new game is about to start!');
+    var potentialPlayers = this.names[this.options.channel].filter(function (name) {
+        return name != _this.client.nick;
+    });
+
+    utils.joinWithMax(potentialPlayers, ' ', 80).forEach(function (line) {
+        _this.client.say(_this.options.channel, line);
+    })
+
+    this.client.say(this.options.channel, '\x02A new game is about to start!');
 };
 
 Bot.prototype.onGameEndGame = function onGameEndGame () {
@@ -508,13 +515,19 @@ Bot.prototype.onGameSide = function onGameSide (player, side) {
         /* Wolves Side */
         case Game.SIDE_WOLVES: {
             this.client.notice(player, sprintf('%1$s:\x0f\x0305 You side with \x02the werewolves\x02', player));
+            this.client.notice(player, sprintf('%1$s:\x0f\x0305 The werewolves are: \x02%2$s\x02', player, this.game.getRolePlayers(Game.ROLE_WOLF).join('\x02, \x02')));
             this.client.notice(player, sprintf('%1$s:\x0f\x0305 In order to win, you have to kill anyone that\'s not a werewolf', player));
         } break;
-    }
 
-    // TODO: If player is a werewolf (not necessarily in the werewolv side)
-    if (side == Game.SIDE_WOLVES) {
-        this.client.notice(player, sprintf('%1$s:\x0f\x0305 The werewolves are: \x02%2$s\x02', player, this.game.getRolePlayers(Game.ROLE_WOLF).join('\x02, \x02')));
+        /* Wolves Side */
+        case Game.SIDE_LOVERS: {
+            var otherlover = this.game.lovers.filter(function (lover) { return lover != player; })[0];
+
+            this.client.notice(player, sprintf('%1$s:\x0f\x0306 You are one of \x02the lovers\x02', player));
+            this.client.notice(player, sprintf('%1$s:\x0f\x0306 You are in love with \x02%2$s\x02', player, otherLover));
+            this.client.notice(player, sprintf('%1$s:\x0f\x0306 If any of you two die, the other will immediately commit suicide', player));
+            this.client.notice(player, sprintf('%1$s:\x0f\x0306 In order to win, you need to be alive at the end of the game', player));
+        } break;
     }
 };
 

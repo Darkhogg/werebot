@@ -4,10 +4,14 @@ var path = require('path');
 
 var logger = require('>/common/logger');
 
-var townsFirst  = fs.readFileSync(path.join(path.dirname(require.main.filename), 'data', 'towns.1.txt'), 'utf8').trim().split('\n');
-var townsSecond = fs.readFileSync(path.join(path.dirname(require.main.filename), 'data', 'towns.2.txt'), 'utf8').trim().split('\n');
+var townsFirst;
+var townsSecond;
 
 module.exports.generateTownName = function generateTownName () {
+    if (!townsFirst || !townsSecond) {
+        townsFirst  = fs.readFileSync(path.join(path.dirname(require.main.filename), 'data', 'towns.1.txt'), 'utf8').trim().split('\n');
+        townsSecond = fs.readFileSync(path.join(path.dirname(require.main.filename), 'data', 'towns.2.txt'), 'utf8').trim().split('\n');
+    }
     return townsFirst[Math.floor(Math.random() * townsFirst.length)]
          + townsSecond[Math.floor(Math.random() * townsSecond.length)];
 };
@@ -87,4 +91,21 @@ module.exports.format = function format (string) {
         .replace(/\^K/g, '\x03')
         .replace(/\^U/g, '\x1f')
         .replace(/\^I/g, '\x1d');
+}
+
+module.exports.join = function (array, glue_, lastGlue_) {
+    var glue = glue_ || '';
+    var lastGlue = lastGlue_ || glue;
+
+    var str = '';
+    array.forEach(function (v, i) {
+        if (i > 0 && i < array.length - 1) {
+            str += glue;
+        }
+        if (i > 0 && i == array.length - 1) {
+            str += lastGlue;
+        }
+        str += v;
+    });
+    return str;
 }
