@@ -34,6 +34,7 @@ var Bot = function Bot (opts) {
 
 Bot.prototype.start = function start (version) {
     var _this = this;
+    this.lastMessage = Date.now();
 
     this.names = {};
     this.isRegistered = {};
@@ -54,6 +55,32 @@ Bot.prototype.start = function start (version) {
             realName: 'Werebot v' + version
         }
     );
+
+    setInterval(function () {
+        var now = Date.now();
+        var diff = now - _this.lastMessage;
+
+        if (diff > 250 * 1000) {
+            logger.debug('Last message %s seconds ago!', diff/1000);
+            _this.client.send('ping', _this.options.host);
+        }
+
+        if (diff > 300 * 1000) {
+            crashit.crash(2);
+        }
+    }, 10 * 1000);
+
+    this.client.on('raw', function () {
+        _this.lastMessage = Date.now();
+    });
+
+    this.client.on('ping', function (data) {
+        logger.silly('[   PING] %s', data);
+    });
+
+    this.client.on('pong', function (data) {
+        logger.silly('[   PONG] %s', data);
+    });
 
     this.client.once('abort', function () {
         crashit.crash(1);
