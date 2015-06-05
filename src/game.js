@@ -183,6 +183,9 @@ Game.DEFAULT_SIDES[Game.ROLE_THIEF]    = Game.SIDE_TOWN;
 
 Game.DEFAULT_SIDES[Game.ROLE_WOLF] = Game.SIDE_WOLVES;
 
+/* === OTHER === */
+Game.LIMIT_KIDEVENTS = 3;
+
 /* =========================== */
 /* === INFORMATION GETTERS === */
 
@@ -827,6 +830,10 @@ Game.prototype.onAttack = function onAttack (player, victim, oldVictim) {
 
 Game.prototype.onPeekEvent = function onPeekEvent (event, args) {
     this.kidEvents++;
+
+    if (this.kidEvents >= Game.LIMIT_KIDEVENTS) {
+        this.endTurn(Game.TURN_KIDPEEK);
+    }
 };
 
 /* ====================== */
