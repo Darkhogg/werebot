@@ -50,6 +50,9 @@ var Game = function Game () {
     this.on(  'end-turn:' + Game.TURN_Witch, this.onEndTurnWitch, this);
 
     this.on('death', this.onDeath, this);
+
+    this.on('attack', this.onAttack, this);
+    this.on('peek-event', this.onPeekEvent, this);
 };
 
 var GameError = Game.Error = function GameError (message) {
@@ -73,6 +76,7 @@ Game.MIN_PLAYERS = config.minPlayers || 5;
 Game.ROLE_VILLAGER  = 'villager';
 Game.ROLE_WOLF      = 'werewolf';
 Game.ROLE_SEER      = 'seer';
+Game.ROLE_KID       = 'kid';
 Game.ROLE_WITCH     = 'witch';
 Game.ROLE_HUNTER    = 'hunter';
 Game.ROLE_CUPID     = 'cupid';
@@ -80,8 +84,13 @@ Game.ROLE_THIEF     = 'thief';
 
 /* === MIN PLAYERS FOR ROLE === */
 Game.PLAYERS_SEER = [
-    { 'players': 5, 'probability': 0.75 },
+    { 'players': 5, 'probability': 0.80 },
     { 'players': 6, 'probability': 0.99 },
+];
+Game.PLAYERS_KID = [
+    { 'players': 5, 'probability': 0.80 },
+    { 'players': 6, 'probability': 0.90 },
+    { 'players': 7, 'probability': 0.99 },
 ];
 Game.PLAYERS_WITCH = [
     { 'players': 5, 'probability': 0.50 },
@@ -126,6 +135,7 @@ Game.TURN_ELECTION   = 'election';
 Game.TURN_CUPID      = 'cupid';
 Game.TURN_WOLVES     = 'wolves';
 Game.TURN_SEER       = 'seer';
+Game.TURN_KIDPEEK    = 'kid-peek';
 Game.TURN_WITCH      = 'witch';
 Game.TURN_HUNTER     = 'hunter';
 Game.TURN_DISCUSSION = 'discussion';
@@ -138,6 +148,7 @@ Game.TIME_ELECTION   = (config.testing) ? 30 : 150;
 Game.TIME_CUPID      = (config.testing) ? 30 : 45;
 Game.TIME_WOLVES     = (config.testing) ? 30 : 60;
 Game.TIME_SEER       = (config.testing) ? 20 : 45;
+Game.TIME_KIDPEEK    = (config.testing) ? 15 : 10;
 Game.TIME_WITCH      = (config.testing) ? 20 : 45;
 Game.TIME_HUNTER     = (config.testing) ? 20 : 30;
 Game.TIME_DISCUSSION = (config.testing) ? 15 : 60;
@@ -161,9 +172,11 @@ Game.DEFAULT_SIDES = {};
 
 Game.DEFAULT_SIDES[Game.ROLE_VILLAGER] = Game.SIDE_TOWN;
 Game.DEFAULT_SIDES[Game.ROLE_SEER]     = Game.SIDE_TOWN;
+Game.DEFAULT_SIDES[Game.ROLE_KID]      = Game.SIDE_TOWN;
 Game.DEFAULT_SIDES[Game.ROLE_WITCH]    = Game.SIDE_TOWN;
 Game.DEFAULT_SIDES[Game.ROLE_HUNTER]   = Game.SIDE_TOWN;
 Game.DEFAULT_SIDES[Game.ROLE_CUPID]    = Game.SIDE_TOWN;
+Game.DEFAULT_SIDES[Game.ROLE_THIEF]    = Game.SIDE_TOWN;
 
 Game.DEFAULT_SIDES[Game.ROLE_WOLF] = Game.SIDE_WOLVES;
 
@@ -519,12 +532,12 @@ Game.prototype.assignRoles = function assignRoles () {
     this._emit('assigned');
 
     _.forEach(this.roles, function (role, player) {
-        _this.emit('role', player, role);
+        _this._emit('role', player, role);
     });
 
     _.forEach(this.sides, function (sides, player) {
         sides.forEach(function (side) {
-            _this.emit('side', player, side);
+            _this._emit('side', player, side);
         })
     });
 };
@@ -646,8 +659,9 @@ Game.prototype.onEndPhasePreparation = function onEndPhasePreparation () {
 
 
 Game.prototype.onStartPhaseNight = function onStartPhaseNight () {
-    this.applyDeaths();
+    this.kidPeeked = false;
 
+    this.applyDeaths();
     this.performVictory();
 
     this.startTurn(Game.TURN_WOLVES, Game.TIME_WOLVES);
@@ -714,7 +728,7 @@ Game.prototype.onEndTurnWolves = function onEndTurnWolves () {
     if (victims.length > 0) {
         this.wolvesVictim = _.shuffle(victims)[0];
 
-        this.emit('wolves-victim', this.wolvesVictim);
+        this._emit('wolves-victim', this.wolvesVictim);
         this.addDeath(this.wolvesVictim, Game.DEATH_WOLVES);
     }
 
@@ -793,8 +807,28 @@ Game.prototype.onDeath = function onDeath (player) {
     this.performVictory();
 };
 
-/* ================== */
-/* === PLAYER ACTIONS */
+
+Game.prototype.onAttack = function onAttack (player, victim, oldVictim) {
+    /* If everyone has voted and there is majority, end the turn */
+    if (
+        this.totalAttackVoted.length >= this.getRolePlayers(Game.ROLE_WOLF).length &&
+        utils.mostVoted(this.attackVictims)
+    ) {
+        this.endTurn(Game.TURN_WOLVES);
+    }
+
+    /* If the kid is awake and the vote isn't blank... */
+    if (this.isTurn(Game.TURN_KIDPEEK) && victim != Game.BLANK) {
+        this._emit('peek-event', 'attack', [player, victim]);
+    }
+};
+
+Game.prototype.onPeekEvent = function onPeekEvent (event, args) {
+    this.kidEvents++;
+};
+
+/* ====================== */
+/* === PLAYER ACTIONS === */
 
 Game.prototype.play = function play (name) {
     if (this.running) {
@@ -888,14 +922,6 @@ Game.prototype.attack = function attack (name, victimName) {
     }
 
     this._emit('attack', player, victim, oldVictim);
-
-    /* If everyone has voted and there is majority, end the turn */
-    if (
-        this.totalAttackVoted.length >= this.getRolePlayers(Game.ROLE_WOLF).length &&
-        utils.mostVoted(this.attackVictims)
-    ) {
-        this.endTurn(Game.TURN_WOLVES);
-    }
 };
 
 Game.prototype.lynch = function (name, targetName) {
@@ -982,7 +1008,39 @@ Game.prototype.see = function see (name, targetName) {
     this._emit('see', player, target, this.getPlayerRole(target));
 
     this.endTurn(Game.TURN_SEER);
+    if (this.isTurn(Game.TURN_KIDPEEK)) {
+        this._emit('peek-event', 'see', player, target);
+    }
 };
+
+Game.prototype.peek = function peek (name) {
+    var player = this.findPlayer(name);
+
+    if (!player) {
+        throw new GameError('player_not_playing');
+    }
+
+    if (this.getPlayerRole(player) != Game.ROLE_KID) {
+        throw new GameError('peek_not_kid');
+    }
+
+    if (!this.isPhase(Game.PHASE_NIGHTTIME)) {
+        throw new GameError('peek_not_night');
+    }
+
+    if (this.kidPeeked) {
+        throw new GameError('peek_already_peeked');
+    }
+
+    /* --- Everything OK --- */
+
+    logger.verbose('PEEK("%s")', name);
+
+    this.kidPeeked = true;
+    this.kidEvents = 0;
+
+    this.startTurn(Game.TURN_KIDPEEK, Game.TIME_KIDPEEK);
+}
 
 Game.prototype.useLife = function useLife (name, targetName) {
     var player = this.findPlayer(name);
@@ -1019,6 +1077,8 @@ Game.prototype.useLife = function useLife (name, targetName) {
 
     /* --- Everything OK --- */
 
+    logger.verbose('LIFEPOT("%s")', name, target);
+
     if (target) {
         this.removeDeath(target, Game.DEATH_WOLVES);
         this.lifePotions--;
@@ -1030,7 +1090,7 @@ Game.prototype.useLife = function useLife (name, targetName) {
         this.endTurn(Game.TURN_WITCH);
     }
 
-    this.emit('lifepot', player, target);
+    this._emit('lifepot', player, target);
 };
 
 Game.prototype.useDeath = function useDeath (name, targetName) {
@@ -1068,6 +1128,8 @@ Game.prototype.useDeath = function useDeath (name, targetName) {
 
     /* --- Everything OK --- */
 
+    logger.verbose('DEATHPOT("%s")', name, target);
+
     if (target) {
         this.addDeath(target, Game.DEATH_WITCH);
         this.deathPotions--;
@@ -1079,7 +1141,7 @@ Game.prototype.useDeath = function useDeath (name, targetName) {
         this.endTurn(Game.TURN_WITCH);
     }
 
-    this.emit('deathpot', player, target);
+    this._emit('deathpot', player, target);
 };
 
 Game.prototype.revenge = function revenge (name, targetName) {
@@ -1112,6 +1174,8 @@ Game.prototype.revenge = function revenge (name, targetName) {
     }
 
     /* --- Everything OK --- */
+
+    logger.verbose('REVENGE("%s")', name, target);
 
     if (target) {
         this.addDeath(target, Game.DEATH_HUNTER, true);

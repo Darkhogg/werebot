@@ -344,6 +344,11 @@ Bot.prototype.onCommand = function onCommand (who, where, command, args) {
                 this.game.see(who, args[0]);
             } break;
 
+            /* Use the kid ability */
+            case 'peek': {
+                this.game.peek(who);
+            } break;
+
             /* Use the witch ability */
             case 'lifepot': {
                 this.game.useLife(who, args[0]);
@@ -609,6 +614,23 @@ Bot.prototype.onGameEndTurnSeer = function onGameEndTurnSeer () {
 };
 
 
+Bot.prototype.onGameStartTurnKid = function onGameStartTurnKid () {
+    var _this = this;
+
+    this.game.getRolePlayers(Game.ROLE_KID).forEach(function (kid) {
+        _this.client.notice(kid, sprintf('You wake up and go outside; if anything happens, you\'ll see it'));
+    });
+};
+
+Bot.prototype.onGameEndTurnKid = function onGameEndTurnKid () {
+    var _this = this;
+
+    this.game.getRolePlayers(Game.ROLE_KID).forEach(function (kid) {
+        _this.client.notice(kid, 'You go back to sleep');
+    });
+};
+
+
 /* === WITCH === */
 
 Bot.prototype.onGameStartTurnWitch = function onGameStartTurnWitch () {
@@ -641,18 +663,6 @@ Bot.prototype.onGameEndTurnWitch = function onGameEndTurnWitch () {
     this.game.getRolePlayers(Game.ROLE_WITCH).forEach(function (witch) {
         _this.client.notice(witch, sprintf('Fearing the werewolves might discover you, you go back to sleep'));
     });
-};
-
-Bot.prototype.onGameLifePot = function (witch, target) {
-    if (target) {
-        this.client.say(witch, sprintf('You\'ve used a \x0303life potion\x0300 on \x02%1$s\x02', target));
-    }
-};
-
-Bot.prototype.onGameDeathPot = function (witch, target) {
-    if (target) {
-        this.client.say(witch, sprintf('You\'ve used a \x0305death potion\x0300 on \x02%1$s\x02', target));
-    }
 };
 
 
@@ -763,11 +773,52 @@ Bot.prototype.onGameVote = function onGameVote (player, target) {
     });
 };
 
-
 Bot.prototype.onGameSee = function onGameSee (player, target, role) {
     var _this = this;
 
     this.client.notice(player, sprintf('%s: The player \x02%s\x02 is a \x02\x1f%s\x1f\x02', player, target, role));
+};
+
+
+Bot.prototype.onGamePeekEvent = function onGamePeekEvent (player, event, args) {
+    var _this = this;
+
+    this.getRolePlayers(Game.ROLE_KID).forEach(function (kid) {
+        switch (event) {
+            case 'attack': {
+                _this.client.notice(kid, sprintf('%1$s: \x0fYou see \x02%2$s\x02, the \x0305\x02werewolf\x0f, planning to attack \x02%3$s\x02 tonight', kid, args[0], args[1]));
+            } break;
+
+            case 'see': {
+                _this.client.notice(kid, sprintf('%1$s: \x0fYou see \x02%2$s\x02, the \x0301\x02seer\x0f, revealing the true identity of \x02%3$s\x02', kid, args[0], args[1]));
+            } break;
+
+            case 'lifepot': {
+                _this.client.notice(kid, sprintf('%1$s: \x0fYou see \x02%2$s\x02, the \x0306\x02witch\x0f, using a \x0303life potion\x0f on \x02%3$s\x02', kid, args[0], args[1]));
+            } break;
+
+            case 'deathpot': {
+                _this.client.notice(kid, sprintf('%1$s: \x0fYou see \x02%2$s\x02, the \x0306\x02witch\x0f, using a \x0305death potion\x0f on \x02%3$s\x02', kid, args[0], args[1]));
+            } break;
+
+            default: {
+                _this.client.notice(kid, sprintf('Unknown event: \x02%s\x02 [%s]', event, args.join(', ')));
+            }
+        }
+    });
 }
+
+
+Bot.prototype.onGameLifePot = function (witch, target) {
+    if (target) {
+        this.client.say(witch, sprintf('You\'ve used a \x0303life potion\x0300 on \x02%1$s\x02', target));
+    }
+};
+
+Bot.prototype.onGameDeathPot = function (witch, target) {
+    if (target) {
+        this.client.say(witch, sprintf('You\'ve used a \x0305death potion\x0300 on \x02%1$s\x02', target));
+    }
+};
 
 module.exports = Bot;
