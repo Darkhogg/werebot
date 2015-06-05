@@ -521,6 +521,7 @@ Bot.prototype.onGameSide = function onGameSide (player, side) {
 
         /* Wolves Side */
         case Game.SIDE_LOVERS: {
+            return;
             var otherlover = this.game.lovers.filter(function (lover) { return lover != player; })[0];
 
             this.client.notice(player, sprintf('%1$s:\x0f\x0306 You are one of \x02the lovers\x02', player));

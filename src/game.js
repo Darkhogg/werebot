@@ -76,27 +76,34 @@ Game.ROLE_SEER      = 'seer';
 Game.ROLE_WITCH     = 'witch';
 Game.ROLE_HUNTER    = 'hunter';
 Game.ROLE_CUPID     = 'cupid';
+Game.ROLE_THIEF     = 'thief';
 
 /* === MIN PLAYERS FOR ROLE === */
 Game.PLAYERS_SEER = [
     { 'players': 5, 'probability': 0.75 },
-    { 'players': 6, 'probability': 0.95 },
+    { 'players': 6, 'probability': 0.99 },
 ];
 Game.PLAYERS_WITCH = [
-    { 'players': 5, 'probability': 0.45 },
-    { 'players': 6, 'probability': 0.70 },
-    { 'players': 7, 'probability': 0.95 },
+    { 'players': 5, 'probability': 0.50 },
+    { 'players': 6, 'probability': 0.75 },
+    { 'players': 7, 'probability': 0.99 },
 ];
 Game.PLAYERS_HUNTER = [
-    { 'players': 5, 'probability': 0.35 },
-    { 'players': 6, 'probability': 0.55 },
-    { 'players': 7, 'probability': 0.75 },
-    { 'players': 8, 'probability': 0.95 },
+    { 'players': 5, 'probability': 0.40 },
+    { 'players': 6, 'probability': 0.60 },
+    { 'players': 7, 'probability': 0.80 },
+    { 'players': 8, 'probability': 0.99 },
 ];
 Game.PLAYERS_CUPID = [
-    { 'players': 5, 'probability': 0.35 },
-    { 'players': 6, 'probability': 0.65 },
-    { 'players': 7, 'probability': 0.95 },
+    { 'players': 5, 'probability': 0.40 },
+    { 'players': 6, 'probability': 0.70 },
+    { 'players': 7, 'probability': 0.99 },
+];
+Game.PLAYERS_THIEF = [
+    { 'players': 5, 'probability': 0.40 },
+    { 'players': 6, 'probability': 0.60 },
+    { 'players': 7, 'probability': 0.80 },
+    { 'players': 8, 'probability': 0.99 },
 ];
 
 /* === ROLE PRIORITY & PLAYERS === */
@@ -105,6 +112,7 @@ Game.ROLEPLAYERS = [
     { 'role': Game.ROLE_WITCH,  'chances': Game.PLAYERS_WITCH },
     { 'role': Game.ROLE_HUNTER, 'chances': Game.PLAYERS_HUNTER },
     { 'role': Game.ROLE_CUPID,  'chances': Game.PLAYERS_CUPID },
+    { 'role': Game.ROLE_THIEF,  'chances': Game.PLAYERS_THIEF },
 ];
 
 /* === GAME PHASES === */
@@ -401,6 +409,7 @@ Game.prototype.endTurn = function endTurn (turn, when) {
 
 Game.prototype.assignRoles = function assignRoles () {
     var _this = this;
+    this.players.push('%A', '%B', '%C', '%D', '%E', '%F', '%G')
 
     this.assignedRoles = true;
 
@@ -433,15 +442,21 @@ Game.prototype.assignRoles = function assignRoles () {
 
         /* Find out the probabilidy */
         rolespec.chances.forEach(function (chance) {
-            console.log(chance)
             if (_this.players.length >= chance.players) {
                 probability = Math.max(probability, chance.probability);
             }
         });
 
+        logger.silly('Probability of %s: %f', rolespec.role, probability);
+
         /* If the role gets randomly selected */
         if (Math.random() < probability) {
             roles.push(rolespec.role);
+
+            /* If this was a thief, ensure we add 2 extra roles */
+            if (rolespec.role == Game.ROLE_THIEF) {
+                numRoles = this.players.length + 2;
+            }
         }
     }
 
@@ -495,7 +510,10 @@ Game.prototype.assignRoles = function assignRoles () {
     }
 
     /* All roles after the last one assigned should be left for the thief */
-    // TODO Thief
+    if (roles.indexOf(Game.ROLE_THIEF) >= 0) {
+        this.thiefRoles = roles.slice(this.players.length).sort();
+        logger.silly('Thief Roles: ', this.thiefRoles.join(', '));
+    }
 
     /* Emit the apprpriate event */
     this._emit('assigned');
