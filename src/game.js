@@ -91,6 +91,8 @@ Game.PLAYERS_KID = [
     { 'players': 5, 'probability': 0.80 },
     { 'players': 6, 'probability': 0.90 },
     { 'players': 7, 'probability': 0.99 },
+
+    {players:0,probability:1}
 ];
 Game.PLAYERS_WITCH = [
     { 'players': 5, 'probability': 0.50 },
@@ -118,10 +120,11 @@ Game.PLAYERS_THIEF = [
 /* === ROLE PRIORITY & PLAYERS === */
 Game.ROLEPLAYERS = [
     { 'role': Game.ROLE_SEER,   'chances': Game.PLAYERS_SEER },
+    { 'role': Game.ROLE_KID,   'chances': Game.PLAYERS_KID },
     { 'role': Game.ROLE_WITCH,  'chances': Game.PLAYERS_WITCH },
     { 'role': Game.ROLE_HUNTER, 'chances': Game.PLAYERS_HUNTER },
-    { 'role': Game.ROLE_CUPID,  'chances': Game.PLAYERS_CUPID },
-    { 'role': Game.ROLE_THIEF,  'chances': Game.PLAYERS_THIEF },
+    //{ 'role': Game.ROLE_CUPID,  'chances': Game.PLAYERS_CUPID },
+    //{ 'role': Game.ROLE_THIEF,  'chances': Game.PLAYERS_THIEF },
 ];
 
 /* === GAME PHASES === */
@@ -422,7 +425,6 @@ Game.prototype.endTurn = function endTurn (turn, when) {
 
 Game.prototype.assignRoles = function assignRoles () {
     var _this = this;
-    this.players.push('%A', '%B', '%C', '%D', '%E', '%F', '%G')
 
     this.assignedRoles = true;
 
@@ -460,7 +462,7 @@ Game.prototype.assignRoles = function assignRoles () {
             }
         });
 
-        logger.silly('Probability of %s: %f', rolespec.role, probability);
+        logger.silly('Probability of %s: %d', rolespec.role, probability);
 
         /* If the role gets randomly selected */
         if (Math.random() < probability) {
@@ -1091,6 +1093,9 @@ Game.prototype.useLife = function useLife (name, targetName) {
     }
 
     this._emit('lifepot', player, target);
+    if (this.isTurn(Game.TURN_KIDPEEK)) {
+        this._emit('peek-event', 'lifepot', player, target);
+    }
 };
 
 Game.prototype.useDeath = function useDeath (name, targetName) {
@@ -1142,6 +1147,9 @@ Game.prototype.useDeath = function useDeath (name, targetName) {
     }
 
     this._emit('deathpot', player, target);
+    if (this.isTurn(Game.TURN_KIDPEEK)) {
+        this._emit('peek-event', 'deathpot', player, target);
+    }
 };
 
 Game.prototype.revenge = function revenge (name, targetName) {

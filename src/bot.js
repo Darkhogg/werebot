@@ -47,6 +47,8 @@ Bot.prototype.start = function start (version) {
         {
             //debug: true,
             autoConnect: false,
+            floodProtection: true,
+            floodProtectionDelay: 100,
             channels: [],
             secure: true,
             selfSigned: true,
@@ -143,6 +145,9 @@ Bot.prototype.start = function start (version) {
     this.game.on('start-turn:' + Game.TURN_SEER, this.onGameStartTurnSeer, this);
     this.game.on(  'end-turn:' + Game.TURN_SEER, this.onGameEndTurnSeer, this);
 
+    this.game.on('start-turn:' + Game.TURN_KIDPEEK, this.onGameStartTurnKid, this);
+    this.game.on(  'end-turn:' + Game.TURN_KIDPEEK, this.onGameEndTurnKid, this);
+
     this.game.on('start-turn:' + Game.TURN_WITCH, this.onGameStartTurnWitch, this);
     this.game.on(  'end-turn:' + Game.TURN_WITCH, this.onGameEndTurnWitch, this);
 
@@ -162,6 +167,8 @@ Bot.prototype.start = function start (version) {
     this.game.on('see', this.onGameSee, this);
     this.game.on('lifepot', this.onGameLifePot, this);
     this.game.on('deathpot', this.onGameDeathPot, this);
+
+    this.game.on('peek-event', this.onGamePeekEvent, this);
 
     this.nickserv = nickserv(this.client, this.options.nick, this.options.nickservPassword);
 
@@ -328,7 +335,6 @@ Bot.prototype.onMessage = function onMessage (from, to, text, msg) {
 
 Bot.prototype.onCommand = function onCommand (who, where, command, args) {
     var _this = this;
-    logger.debug('  > %s %s: [%s]', who, where, command.toUpperCase(), args);
 
     try {
         switch (command) {
@@ -483,6 +489,10 @@ Bot.prototype.onGameStartPhaseNight = function onGameStartPhaseNight () {
         if (user != _this.client.nick) {
             _this.client.send('MODE', _this.options.channel, '-v', user);
         }
+    });
+
+    this.game.getRolePlayers(Game.ROLE_KID).forEach(function (kid) {
+        _this.client.notice(kid, sprintf('%1$s: At any point during the night, say \x1f/msg %2$s !peek\x1f to see what\'s happening in the town', kid, _this.client.nick));
     });
 };
 
@@ -807,10 +817,10 @@ Bot.prototype.onGameSee = function onGameSee (player, target, role) {
 };
 
 
-Bot.prototype.onGamePeekEvent = function onGamePeekEvent (player, event, args) {
+Bot.prototype.onGamePeekEvent = function onGamePeekEvent (event, args) {
     var _this = this;
 
-    this.getRolePlayers(Game.ROLE_KID).forEach(function (kid) {
+    this.game.getRolePlayers(Game.ROLE_KID).forEach(function (kid) {
         switch (event) {
             case 'attack': {
                 _this.client.notice(kid, sprintf('%1$s: \x0fYou see \x02%2$s\x02, the \x0305\x02werewolf\x0f, planning to attack \x02%3$s\x02 tonight', kid, args[0], args[1]));
