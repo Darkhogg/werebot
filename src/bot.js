@@ -465,17 +465,7 @@ Bot.prototype.onGameStartPhasePreparation = function onGameStartPhasePreparation
 };
 
 Bot.prototype.onGameEndPhasePreparation = function onGameEndPhasePreparation () {
-    var _this = this;
 
-    /* Add moderated flag to channel */
-    this.client.send('MODE', this.options.channel, '+m');
-
-    /* Remove @ % and + from everyone */
-    this.names[this.options.channel].forEach(function (user) {
-        if (user != _this.client.nick) {
-            _this.client.send('MODE', _this.options.channel, '-ohv', user, user, user);
-        }
-    });
 };
 
 
@@ -520,7 +510,19 @@ Bot.prototype.onGameStartTurnJoining = function onGameStartTurnJoining () {
 };
 
 Bot.prototype.onGameEndTurnJoining = function onGameEndTurnJoining () {
+    var _this = this;
+
     this.client.say(this.options.channel, '\x02Time\'s up!');
+
+    /* Add moderated flag to channel */
+    this.client.send('MODE', this.options.channel, '+m');
+
+    /* Remove @ % and + from everyone */
+    this.names[this.options.channel].forEach(function (user) {
+        if (user != _this.client.nick) {
+            _this.client.send('MODE', _this.options.channel, '-ohv', user, user, user);
+        }
+    });
 };
 
 Bot.prototype.onGameAssignedRoles = function onGameAssignedRoles () {

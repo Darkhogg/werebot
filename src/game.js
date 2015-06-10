@@ -34,6 +34,12 @@ var Game = function Game () {
     this.on('start-turn:' + Game.TURN_JOINING, this.onStartTurnJoining, this);
     this.on(  'end-turn:' + Game.TURN_JOINING, this.onEndTurnJoining, this);
 
+    this.on('start-turn:' + Game.TURN_INFO, this.onStartTurnInfo, this);
+    this.on(  'end-turn:' + Game.TURN_INFO, this.onEndTurnInfo, this);
+
+    this.on('start-turn:' + Game.TURN_THIEF, this.onStartTurnThief, this);
+    this.on(  'end-turn:' + Game.TURN_THIEF, this.onEndTurnThief, this);
+
     this.on('start-turn:' + Game.TURN_WOLVES, this.onStartTurnWolves, this);
     this.on(  'end-turn:' + Game.TURN_WOLVES, this.onEndTurnWolves, this);
 
@@ -70,17 +76,19 @@ Game.prototype._emit = function emit () {
     });
 };
 
-Game.MIN_PLAYERS = config.minPlayers || 5;
-
 /* === PLAYER ROLES === */
 Game.ROLE_VILLAGER  = 'villager';
-Game.ROLE_WOLF      = 'werewolf';
 Game.ROLE_SEER      = 'seer';
 Game.ROLE_KID       = 'kid';
 Game.ROLE_WITCH     = 'witch';
 Game.ROLE_HUNTER    = 'hunter';
 Game.ROLE_CUPID     = 'cupid';
 Game.ROLE_THIEF     = 'thief';
+
+Game.ROLE_WOLF       = 'werewolf';
+Game.ROLE_WHITEWOLF  = 'whitewolf';
+Game.ROLE_FIERCEWOLF = 'fiercewolf';
+Game.ROLE_INFECTWOLF = 'infectwolf';
 
 /* === MIN PLAYERS FOR ROLE === */
 Game.PLAYERS_SEER = [
@@ -91,8 +99,6 @@ Game.PLAYERS_KID = [
     { 'players': 5, 'probability': 0.80 },
     { 'players': 6, 'probability': 0.90 },
     { 'players': 7, 'probability': 0.99 },
-
-    {players:0,probability:1}
 ];
 Game.PLAYERS_WITCH = [
     { 'players': 5, 'probability': 0.50 },
@@ -115,6 +121,7 @@ Game.PLAYERS_THIEF = [
     { 'players': 6, 'probability': 0.60 },
     { 'players': 7, 'probability': 0.80 },
     { 'players': 8, 'probability': 0.99 },
+    {players:0,probability:1}
 ];
 
 /* === ROLE PRIORITY & PLAYERS === */
@@ -134,19 +141,27 @@ Game.PHASE_NIGHTTIME   = 'night';
 
 /* === PLAYER TURNS === */
 Game.TURN_JOINING    = 'joining';
+Game.TURN_INFO       = 'info';
+
 Game.TURN_ELECTION   = 'election';
 Game.TURN_CUPID      = 'cupid';
+Game.TURN_THIEF      = 'thief';
+
 Game.TURN_WOLVES     = 'wolves';
 Game.TURN_SEER       = 'seer';
 Game.TURN_KIDPEEK    = 'kid-peek';
 Game.TURN_WITCH      = 'witch';
 Game.TURN_HUNTER     = 'hunter';
+
 Game.TURN_DISCUSSION = 'discussion';
 Game.TURN_LYNCHING   = 'lynching';
-Game.TURN_SHERIFF    = 'sheriff';
+Game.TURN_SUCCESSOR  = 'successor';
+
 
 /* === TURN DURATIONS === */
 Game.TIME_JOINING    = (config.testing) ? 30 : 60;
+Game.TIME_INFO       = 1; // Per player
+Game.TIME_THIEF      = (config.testing) ? 25 : 45;
 Game.TIME_ELECTION   = (config.testing) ? 30 : 150;
 Game.TIME_CUPID      = (config.testing) ? 30 : 45;
 Game.TIME_WOLVES     = (config.testing) ? 30 : 60;
@@ -166,9 +181,12 @@ Game.DEATH_WITCH      = 'witch';
 Game.DEATH_HUNTER     = 'hunter';
 
 /* === GAME SIDES === */
-Game.SIDE_NOBODY = 'nobody';
-Game.SIDE_TOWN   = 'town';
-Game.SIDE_WOLVES = 'werewolves';
+Game.SIDE_NOBODY    = 'nobody';
+Game.SIDE_TOWN      = 'town';
+Game.SIDE_LOVERS    = 'lovers';
+Game.SIDE_WOLVES    = 'werewolves';
+Game.SIDE_WHITEWOLF = 'whitewolf';
+Game.SIDE_FLUTIST   = 'flutist';
 
 /* === DEFAULT ROLE SIDES === */
 Game.DEFAULT_SIDES = {};
@@ -179,12 +197,26 @@ Game.DEFAULT_SIDES[Game.ROLE_KID]      = Game.SIDE_TOWN;
 Game.DEFAULT_SIDES[Game.ROLE_WITCH]    = Game.SIDE_TOWN;
 Game.DEFAULT_SIDES[Game.ROLE_HUNTER]   = Game.SIDE_TOWN;
 Game.DEFAULT_SIDES[Game.ROLE_CUPID]    = Game.SIDE_TOWN;
-Game.DEFAULT_SIDES[Game.ROLE_THIEF]    = Game.SIDE_TOWN;
 
-Game.DEFAULT_SIDES[Game.ROLE_WOLF] = Game.SIDE_WOLVES;
+Game.DEFAULT_SIDES[Game.ROLE_THIEF]    = null; // Don't assign to anything by default
+
+Game.DEFAULT_SIDES[Game.ROLE_WOLF]       = Game.SIDE_WOLVES;
+Game.DEFAULT_SIDES[Game.ROLE_FIERCEWOLF] = Game.SIDE_WOLVES;
+Game.DEFAULT_SIDES[Game.ROLE_INFECTWOLF] = Game.SIDE_WOLVES;
+
+Game.DEFAULT_SIDES[Game.ROLE_WHITEWOLF] = Game.SIDE_WHITEWOLF;
+
+/* === ROLES IDENTIFIED AS "WOLVES" === */
+Game.WOLF_ROLES = [
+    Game.ROLE_WOLF,
+    Game.ROLE_WHITEWOLF,
+    Game.ROLE_FIERCEWOLF,
+    Game.ROLE_INFECTWOLF
+];
 
 /* === OTHER === */
 Game.LIMIT_KIDEVENTS = 3;
+Game.MIN_PLAYERS = config.minPlayers || 5;
 
 /* =========================== */
 /* === INFORMATION GETTERS === */
@@ -356,6 +388,8 @@ Game.prototype.startGame = function startGame () {
     this.players = [];
     this.alivePlayers = [];
 
+    this.wolves = [];
+
     this.roles = {};
     this.rolePlayers = {};
     this.existingRoles = [];
@@ -492,39 +526,9 @@ Game.prototype.assignRoles = function assignRoles () {
 
     /* Assign a role to each player, in "order" */
     for (var i in randPlayers) {
-        var player = randPlayers[i];
-        var role = randRoles[i];
-        var side = Game.DEFAULT_SIDES[role];
-
         logger.verbose('Assign: "%s" is a "%s"', player, role);
 
-        /* Add the player to the role list */
-        if (!this.rolePlayers[role]) {
-            this.rolePlayers[role] = [];
-        }
-        this.rolePlayers[role].push(player);
-
-        /* Set the player role */
-        this.roles[player] = role;
-
-        /* Add the role to the existing roles */
-        if (this.existingRoles.indexOf(role) < 0) {
-            this.existingRoles.push(role);
-        }
-
-        /* Add the player to the side list */
-        if (!this.sidePlayers[side]) {
-            this.sidePlayers[side] = [];
-        }
-        this.sidePlayers[side].push(player);
-
-        /* Set the player side (as a list -- there can be multiple sides!) */
-        this.sides[player] = [side];
-
-        /* Add the side to the existing sides if it didn't exist */
-        if (this.existingSides.indexOf(side) < 0) {
-            this.existingSides.push(side);
-        }
+        this.assignRoleToPlayer(randPlayers[i], randRoles[i]);
     }
 
     /* All roles after the last one assigned should be left for the thief */
@@ -536,15 +540,80 @@ Game.prototype.assignRoles = function assignRoles () {
     /* Emit the apprpriate event */
     this._emit('assigned');
 
-    _.forEach(this.roles, function (role, player) {
-        _this._emit('role', player, role);
-    });
-
     _.forEach(this.sides, function (sides, player) {
         sides.forEach(function (side) {
             _this._emit('side', player, side);
         })
     });
+};
+
+Game.prototype.assignRoleToPlayer = function assignRoleToPlayer (player, role) {
+
+    /* --- 1. Role --- */
+
+    var oldRole = null;
+
+    /* If the player had a role, remove it from its list */
+    if (this.roles && this.roles[player]) {
+        oldRole = this.roles[player];
+        this.rolePlayers.splice(this.rolePlayers.indexOf(player), 1);
+    }
+
+    /* Add the player to the role list */
+    if (!this.rolePlayers[role]) {
+        this.rolePlayers[role] = [];
+    }
+    this.rolePlayers[role].push(player);
+
+    /* Set the player role */
+    this.roles[player] = role;
+
+    /* Add the role to the existing roles */
+    if (this.existingRoles.indexOf(role) < 0) {
+        this.existingRoles.push(role);
+    }
+
+    /* --- 2. Sides --- */
+
+    var side = Game.DEFAULT_SIDES[role];
+
+    if (side != null) {
+        this.addPlayerToSide(player, side);
+
+        /* If it's a wolf, add it as a wolf */
+        if (Game.WOLF_ROLES.indexOf(role) >= 0) {
+            this.wolves.push(player);
+        }
+    }
+
+    /* --- 3. Events --- *
+
+    /* Emit an event! */
+    if (oldRole) {
+        _this._emit('unrole', player, oldRole);
+    }
+    _this._emit('role', player, role);
+};
+
+Game.prototype.addPlayerToSide = function addPlayerToSide (player, side) {
+    /* Add the player to the side list */
+    if (!this.sidePlayers[side]) {
+        this.sidePlayers[side] = [];
+    }
+    this.sidePlayers[side].push(player);
+
+    /* Set the player side (as a list -- there can be multiple sides!) */
+    if (!this.sides[player]) {
+        this.sides[player] = [];
+    }
+    this.sides[player].push(side);
+
+    /* Add the side to the existing sides if it didn't exist */
+    if (this.existingSides.indexOf(side) < 0) {
+        this.existingSides.push(side);
+    }
+
+    this._emit('side', player, side);
 };
 
 Game.prototype.addDeath = function addDeath (who, why, direct) {
@@ -705,10 +774,41 @@ Game.prototype.onStartTurnJoining = function onStartTurnJoining () {
 };
 
 Game.prototype.onEndTurnJoining = function onEndTurnJoining () {
-    if (this.alivePlayers.length >= Game.MIN_PLAYERS) {
+    if (this.players.length >= Game.MIN_PLAYERS) {
         this.assignRoles();
 
-        // TODO Election
+        this.startTurn(Game.TURN_INFO, Game.TIME_INFO * this.players.length);
+    }
+};
+
+
+Game.prototype.onStartTurnInfo = function onStartTurnInfo () {
+};
+
+Game.prototype.onEndTurnInfo = function onEndTurnInfo () {
+    var thiefTime = (this.getRolePlayers(Game.ROLE_THIEF) > 0)
+        ? Game.TIME_THIEF
+        : utils.randomRange(Game.TIME_THIEF / 3, Game.TIME_THIEF * 2 / 3);
+
+    this.startTurn(Game.TURN_THIEF, thiefTime);
+};
+
+
+Game.prototype.onStartTurnThief = function onStartTurnThief () {
+};
+
+Game.prototype.onEndTurnThief = function onEndTurnThief () {
+    var allWolves = this.thiefRoles.all(function (role) {
+        return Game.WOLF_ROLES.indexOf(role) >= 0;
+    });
+
+    if (allWolves && !this.thiefSelect) {
+        this.thiefSelect = _.shuffle(this.thiefRoles)[0];
+    }
+
+    // TODO assign the new role
+    if (this.thiefSelect) {
+        this.assignRoleToPlayer(this.getRolePlayers(Game.ROLE_THIEF)[0], role);
     }
 };
 
@@ -875,6 +975,36 @@ Game.prototype.join = function join (name) {
     this._emit('join', name, this.alivePlayers.length);
 };
 
+Game.prototype.steal = function steal (name, role) {
+    var player = this.findPlayer(name);
+
+    if (!player) {
+        throw new GameError('player_not_playing');
+    }
+
+    if (this.getPlayerRole(player) != Game.ROLE_THIEF) {
+        throw new GameError('steal_not_a_thief');
+    }
+
+    if (!this.isTurn(Game.TURN_THIEF)) {
+        throw new GameError('steal_not_in_turn');
+    }
+
+    if (role != Game.BLANK && this.thiefRoles.indexOf(role) < 0) {
+        throw new GameError('steal_role_not_available');
+    }
+
+    /* --- Everything OK --- */
+
+    logger.verbose('STEAL("%s")', name, role);
+
+    if (role != Game.BLANK) {
+        this.thiefSelect = role;
+    }
+
+    this.endTurn(Game.TURN_THIEF);
+};
+
 Game.prototype.attack = function attack (name, victimName) {
     var player = this.findPlayer(name);
 
@@ -882,7 +1012,7 @@ Game.prototype.attack = function attack (name, victimName) {
         throw new GameError('player_not_playing');
     }
 
-    if (this.getPlayerRole(player) != Game.ROLE_WOLF) {
+    if (this.wolves.indexOf(player) >= 0) {
         throw new GameError('attack_not_a_wolf');
     }
 
