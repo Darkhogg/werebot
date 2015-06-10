@@ -398,6 +398,8 @@ Game.prototype.startGame = function startGame () {
     this.sidePlayers = {};
     this.existingSides = [];
 
+    this.thiefRoles = [];
+
     this.lifePotions = 1;
     this.deathPotions = 1;
 
@@ -526,8 +528,6 @@ Game.prototype.assignRoles = function assignRoles () {
 
     /* Assign a role to each player, in "order" */
     for (var i in randPlayers) {
-        logger.verbose('Assign: "%s" is a "%s"', player, role);
-
         this.assignRoleToPlayer(randPlayers[i], randRoles[i]);
     }
 
@@ -539,12 +539,6 @@ Game.prototype.assignRoles = function assignRoles () {
 
     /* Emit the apprpriate event */
     this._emit('assigned');
-
-    _.forEach(this.sides, function (sides, player) {
-        sides.forEach(function (side) {
-            _this._emit('side', player, side);
-        })
-    });
 };
 
 Game.prototype.assignRoleToPlayer = function assignRoleToPlayer (player, role) {
@@ -573,6 +567,15 @@ Game.prototype.assignRoleToPlayer = function assignRoleToPlayer (player, role) {
         this.existingRoles.push(role);
     }
 
+    /* Emit events! */
+    if (oldRole) {
+        logger.verbose('Unassign: "%s" is NOT a "%s"', player, oldRole);
+        this._emit('unrole', player, oldRole);
+    }
+
+    logger.verbose('Assign: "%s" is a "%s"', player, role);
+    this._emit('role', player, role);
+
     /* --- 2. Sides --- */
 
     var side = Game.DEFAULT_SIDES[role];
@@ -585,14 +588,6 @@ Game.prototype.assignRoleToPlayer = function assignRoleToPlayer (player, role) {
             this.wolves.push(player);
         }
     }
-
-    /* --- 3. Events --- *
-
-    /* Emit an event! */
-    if (oldRole) {
-        _this._emit('unrole', player, oldRole);
-    }
-    _this._emit('role', player, role);
 };
 
 Game.prototype.addPlayerToSide = function addPlayerToSide (player, side) {
@@ -613,6 +608,7 @@ Game.prototype.addPlayerToSide = function addPlayerToSide (player, side) {
         this.existingSides.push(side);
     }
 
+    logger.verbose('Side: "%s" is with "%s"', player, side);
     this._emit('side', player, side);
 };
 
@@ -798,17 +794,22 @@ Game.prototype.onStartTurnThief = function onStartTurnThief () {
 };
 
 Game.prototype.onEndTurnThief = function onEndTurnThief () {
-    var allWolves = this.thiefRoles.all(function (role) {
-        return Game.WOLF_ROLES.indexOf(role) >= 0;
-    });
+    if (this.countRolePlayers(Game.ROLE_THIEF) > 0) {
 
-    if (allWolves && !this.thiefSelect) {
-        this.thiefSelect = _.shuffle(this.thiefRoles)[0];
-    }
+        var allWolves = this.thiefRoles.every(function (role) {
+            return Game.WOLF_ROLES.indexOf(role) >= 0;
+        });
 
-    // TODO assign the new role
-    if (this.thiefSelect) {
-        this.assignRoleToPlayer(this.getRolePlayers(Game.ROLE_THIEF)[0], role);
+        if (this.thiefRoles.length > 0 && allWolves && !this.thiefSelect) {
+            this.thiefSelect = _.shuffle(this.thiefRoles)[0];
+        }
+
+        if (this.thiefSelect) {
+            this.assignRoleToPlayer(this.getRolePlayers(Game.ROLE_THIEF)[0], role);
+
+        } else {
+            this.addPlayerToSide(this.getRolePlayers(Game.ROLE_THIEF)[0], Game.SIDE_TOWN);
+        }
     }
 };
 
