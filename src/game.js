@@ -302,6 +302,11 @@ Game.prototype.getSidePlayers = function getSidePlayers (role) {
     return this.sidePlayers[role];
 };
 
+Game.prototype.countSidePlayers = function countSidePlayers (role) {
+    return this.getSidePlayers(role).length;
+};
+
+
 Game.prototype.checkVictory = function checkVictory () {
     /* Victory already set */
     if (this.winningSide) {
@@ -325,19 +330,19 @@ Game.prototype.checkVictory = function checkVictory () {
     }
 
     /* The town wins if they're the only ones alive */
-    if (this.countRolePlayers(Game.SIDE_TOWN) == this.players.length) {
+    if (this.countSidePlayers(Game.SIDE_TOWN) == this.players.length) {
         this.winningSide = Game.SIDE_TOWN;
         return true;
     }
 
     /* The werewolves win if they're the only ones alive */
-    if (this.countRolePlayers(Game.SIDE_WOLVES) == this.players.length) {
+    if (this.countSidePlayers(Game.SIDE_WOLVES) == this.players.length) {
         this.winningSide = Game.SIDE_WOLVES;
         return true;
     }
 
     /* The lovers win if they're the only ones alive */
-    if (this.countRolePlayers(Game.SIDE_LOVERS) == this.players.length) {
+    if (this.countSidePlayers(Game.SIDE_LOVERS) == this.players.length) {
         this.winningSide = Game.SIDE_LOVERS;
         return true;
     }
