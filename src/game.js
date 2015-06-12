@@ -52,8 +52,8 @@ var Game = function Game () {
     this.on('start-turn:' + Game.TURN_SEER, this.onStartTurnSeer, this);
     this.on(  'end-turn:' + Game.TURN_SEER, this.onEndTurnSeer, this);
 
-    this.on('start-turn:' + Game.TURN_Witch, this.onStartTurnWitch, this);
-    this.on(  'end-turn:' + Game.TURN_Witch, this.onEndTurnWitch, this);
+    this.on('start-turn:' + Game.TURN_WITCH, this.onStartTurnWitch, this);
+    this.on(  'end-turn:' + Game.TURN_WITCH, this.onEndTurnWitch, this);
 
     this.on('death', this.onDeath, this);
 
@@ -121,7 +121,6 @@ Game.PLAYERS_THIEF = [
     { 'players': 6, 'probability': 0.60 },
     { 'players': 7, 'probability': 0.80 },
     { 'players': 8, 'probability': 0.99 },
-    {players:0,probability:1}
 ];
 
 /* === ROLE PRIORITY & PLAYERS === */
@@ -131,7 +130,7 @@ Game.ROLEPLAYERS = [
     { 'role': Game.ROLE_WITCH,  'chances': Game.PLAYERS_WITCH },
     { 'role': Game.ROLE_HUNTER, 'chances': Game.PLAYERS_HUNTER },
     //{ 'role': Game.ROLE_CUPID,  'chances': Game.PLAYERS_CUPID },
-    //{ 'role': Game.ROLE_THIEF,  'chances': Game.PLAYERS_THIEF },
+    { 'role': Game.ROLE_THIEF,  'chances': Game.PLAYERS_THIEF },
 ];
 
 /* === GAME PHASES === */
@@ -160,8 +159,8 @@ Game.TURN_SUCCESSOR  = 'successor';
 
 /* === TURN DURATIONS === */
 Game.TIME_JOINING    = (config.testing) ? 30 : 60;
-Game.TIME_INFO       = 1; // Per player
-Game.TIME_THIEF      = (config.testing) ? 25 : 45;
+Game.TIME_INFO       = 1.5; // Per player
+Game.TIME_THIEF      = (config.testing) ? 45 : 60;
 Game.TIME_ELECTION   = (config.testing) ? 30 : 150;
 Game.TIME_CUPID      = (config.testing) ? 30 : 45;
 Game.TIME_WOLVES     = (config.testing) ? 30 : 60;
@@ -462,6 +461,7 @@ Game.prototype.endTurn = function endTurn (turn, when) {
     this.turnEndTimes[turn] = now + (when || 0) * 1000;
 };
 
+/* TODO REMOVE */ if (config.testing) { var forceRole = Game.ROLE_THIEF; }
 Game.prototype.assignRoles = function assignRoles () {
     var _this = this;
 
@@ -501,6 +501,7 @@ Game.prototype.assignRoles = function assignRoles () {
             }
         });
 
+        /* TODO REMOVE */if (forceRole && forceRole == rolespec.role) { probability = 1; }
         logger.silly('Probability of %s: %d', rolespec.role, probability);
 
         /* If the role gets randomly selected */
@@ -522,6 +523,7 @@ Game.prototype.assignRoles = function assignRoles () {
     /* Shuffle the players and the roles */
     var randPlayers = _.shuffle(this.players);
     var randRoles   = _.shuffle(roles);
+    /* TODO REMOVE */ if (forceRole) { randRoles.splice(randRoles.indexOf(forceRole), 1); randRoles.unshift(forceRole); }
 
     logger.silly('Players: ', randPlayers.join(', '));
     logger.silly('Roles: ', randRoles.join(', '));
@@ -533,7 +535,7 @@ Game.prototype.assignRoles = function assignRoles () {
 
     /* All roles after the last one assigned should be left for the thief */
     if (roles.indexOf(Game.ROLE_THIEF) >= 0) {
-        this.thiefRoles = roles.slice(this.players.length).sort();
+        this.thiefRoles = randRoles.slice(this.players.length);
         logger.silly('Thief Roles: ', this.thiefRoles.join(', '));
     }
 
@@ -550,7 +552,7 @@ Game.prototype.assignRoleToPlayer = function assignRoleToPlayer (player, role) {
     /* If the player had a role, remove it from its list */
     if (this.roles && this.roles[player]) {
         oldRole = this.roles[player];
-        this.rolePlayers.splice(this.rolePlayers.indexOf(player), 1);
+        this.rolePlayers[oldRole].splice(this.rolePlayers[oldRole].indexOf(player), 1);
     }
 
     /* Add the player to the role list */
@@ -805,7 +807,7 @@ Game.prototype.onEndTurnThief = function onEndTurnThief () {
         }
 
         if (this.thiefSelect) {
-            this.assignRoleToPlayer(this.getRolePlayers(Game.ROLE_THIEF)[0], role);
+            this.assignRoleToPlayer(this.getRolePlayers(Game.ROLE_THIEF)[0], this.thiefSelect);
 
         } else {
             this.addPlayerToSide(this.getRolePlayers(Game.ROLE_THIEF)[0], Game.SIDE_TOWN);

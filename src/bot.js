@@ -132,6 +132,10 @@ Bot.prototype.start = function start (version) {
     this.game.on('start-turn:' + Game.TURN_JOINING, this.onGameStartTurnJoining, this);
     this.game.on(  'end-turn:' + Game.TURN_JOINING, this.onGameEndTurnJoining, this);
 
+    this.game.on('start-turn:' + Game.TURN_THIEF, this.onGameStartTurnThief, this);
+    this.game.on(  'end-turn:' + Game.TURN_THIEF, this.onGameEndTurnThief, this);
+
+
     this.game.on('start-turn:' + Game.TURN_WOLVES, this.onGameStartTurnWolves, this);
     this.game.on(  'end-turn:' + Game.TURN_WOLVES, this.onGameEndTurnWolves, this);
     this.game.on('wolves-victim', this.onGameSelectWolvesVictim, this);
@@ -372,6 +376,11 @@ Bot.prototype.onCommand = function onCommand (who, where, command, args) {
                 this.game.lynch(who, args[0]);
             } break;
 
+            /* Vote for lynching */
+            case 'steal': {
+                this.game.steal(who, args[0]);
+            } break;
+
             /* Use the seer ability */
             case 'see': {
                 this.game.see(who, args[0]);
@@ -575,6 +584,24 @@ Bot.prototype.onGameSide = function onGameSide (player, side) {
         } break;
     }
 };
+
+
+Bot.prototype.onGameStartTurnThief = function onGameStartTurnThief () {
+    var _this = this;
+
+    this.game.getRolePlayers(Game.ROLE_THIEF).forEach(function (thief) {
+        _this.client.notice(thief, sprintf('%1$s:\x0f You can choose to become one of the unassigned roles:', thief));
+        _this.game.thiefRoles.forEach(function (role) {
+            _this.client.notice(thief, sprintf('%1$s: - \x0f Write \x1f/msg %4$s !steal %2$s\x1f to become a \x02%3$s\x02', thief, role, role, _this.client.nick));
+        });
+        _this.client.notice(thief, sprintf('%1$s:\x0f You have \x02%2$s\x02 seconds to steal a role', thief, Game.TIME_THIEF));
+    });
+};
+
+Bot.prototype.onGameEndTurnThief = function onGameEndTurnThief () {
+
+};
+
 
 
 Bot.prototype.onGameStartTurnWolves = function onGameStartTurnWolves () {
