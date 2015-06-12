@@ -34,6 +34,7 @@ var Bot = function Bot (opts) {
 
 Bot.prototype.start = function start (version) {
     var _this = this;
+    this.lastMessage = Date.now();
 
     this.names = {};
     this.isRegistered = {};
@@ -46,6 +47,8 @@ Bot.prototype.start = function start (version) {
         {
             //debug: true,
             autoConnect: false,
+            floodProtection: true,
+            floodProtectionDelay: 100,
             channels: [],
             secure: true,
             selfSigned: true,
@@ -54,6 +57,32 @@ Bot.prototype.start = function start (version) {
             realName: 'Werebot v' + version
         }
     );
+
+    setInterval(function () {
+        var now = Date.now();
+        var diff = now - _this.lastMessage;
+
+        if (diff > 250 * 1000) {
+            logger.debug('Last message %s seconds ago!', diff/1000);
+            _this.client.send('ping', _this.options.host);
+        }
+
+        if (diff > 300 * 1000) {
+            crashit.crash(2);
+        }
+    }, 10 * 1000);
+
+    this.client.on('raw', function () {
+        _this.lastMessage = Date.now();
+    });
+
+    this.client.on('ping', function (data) {
+        logger.silly('[   PING] %s', data);
+    });
+
+    this.client.on('pong', function (data) {
+        logger.silly('[   PONG] %s', data);
+    });
 
     this.client.once('abort', function () {
         crashit.crash(1);
@@ -103,6 +132,10 @@ Bot.prototype.start = function start (version) {
     this.game.on('start-turn:' + Game.TURN_JOINING, this.onGameStartTurnJoining, this);
     this.game.on(  'end-turn:' + Game.TURN_JOINING, this.onGameEndTurnJoining, this);
 
+    this.game.on('start-turn:' + Game.TURN_THIEF, this.onGameStartTurnThief, this);
+    this.game.on(  'end-turn:' + Game.TURN_THIEF, this.onGameEndTurnThief, this);
+
+
     this.game.on('start-turn:' + Game.TURN_WOLVES, this.onGameStartTurnWolves, this);
     this.game.on(  'end-turn:' + Game.TURN_WOLVES, this.onGameEndTurnWolves, this);
     this.game.on('wolves-victim', this.onGameSelectWolvesVictim, this);
@@ -115,6 +148,9 @@ Bot.prototype.start = function start (version) {
 
     this.game.on('start-turn:' + Game.TURN_SEER, this.onGameStartTurnSeer, this);
     this.game.on(  'end-turn:' + Game.TURN_SEER, this.onGameEndTurnSeer, this);
+
+    this.game.on('start-turn:' + Game.TURN_KIDPEEK, this.onGameStartTurnKid, this);
+    this.game.on(  'end-turn:' + Game.TURN_KIDPEEK, this.onGameEndTurnKid, this);
 
     this.game.on('start-turn:' + Game.TURN_WITCH, this.onGameStartTurnWitch, this);
     this.game.on(  'end-turn:' + Game.TURN_WITCH, this.onGameEndTurnWitch, this);
@@ -135,6 +171,8 @@ Bot.prototype.start = function start (version) {
     this.game.on('see', this.onGameSee, this);
     this.game.on('lifepot', this.onGameLifePot, this);
     this.game.on('deathpot', this.onGameDeathPot, this);
+
+    this.game.on('peek-event', this.onGamePeekEvent, this);
 
     this.nickserv = nickserv(this.client, this.options.nick, this.options.nickservPassword);
 
@@ -301,7 +339,6 @@ Bot.prototype.onMessage = function onMessage (from, to, text, msg) {
 
 Bot.prototype.onCommand = function onCommand (who, where, command, args) {
     var _this = this;
-    logger.debug('  > %s %s: [%s]', who, where, command.toUpperCase(), args);
 
     try {
         switch (command) {
@@ -339,9 +376,19 @@ Bot.prototype.onCommand = function onCommand (who, where, command, args) {
                 this.game.lynch(who, args[0]);
             } break;
 
+            /* Vote for lynching */
+            case 'steal': {
+                this.game.steal(who, args[0]);
+            } break;
+
             /* Use the seer ability */
             case 'see': {
                 this.game.see(who, args[0]);
+            } break;
+
+            /* Use the kid ability */
+            case 'peek': {
+                this.game.peek(who);
             } break;
 
             /* Use the witch ability */
@@ -427,17 +474,7 @@ Bot.prototype.onGameStartPhasePreparation = function onGameStartPhasePreparation
 };
 
 Bot.prototype.onGameEndPhasePreparation = function onGameEndPhasePreparation () {
-    var _this = this;
 
-    /* Add moderated flag to channel */
-    this.client.send('MODE', this.options.channel, '+m');
-
-    /* Remove @ % and + from everyone */
-    this.names[this.options.channel].forEach(function (user) {
-        if (user != _this.client.nick) {
-            _this.client.send('MODE', _this.options.channel, '-ohv', user, user, user);
-        }
-    });
 };
 
 
@@ -451,6 +488,10 @@ Bot.prototype.onGameStartPhaseNight = function onGameStartPhaseNight () {
         if (user != _this.client.nick) {
             _this.client.send('MODE', _this.options.channel, '-v', user);
         }
+    });
+
+    this.game.getRolePlayers(Game.ROLE_KID).forEach(function (kid) {
+        _this.client.notice(kid, sprintf('%1$s: At any point during the night, say \x1f/msg %2$s !peek\x1f to see what\'s happening in the town', kid, _this.client.nick));
     });
 };
 
@@ -478,7 +519,19 @@ Bot.prototype.onGameStartTurnJoining = function onGameStartTurnJoining () {
 };
 
 Bot.prototype.onGameEndTurnJoining = function onGameEndTurnJoining () {
+    var _this = this;
+
     this.client.say(this.options.channel, '\x02Time\'s up!');
+
+    /* Add moderated flag to channel */
+    this.client.send('MODE', this.options.channel, '+m');
+
+    /* Remove @ % and + from everyone */
+    this.names[this.options.channel].forEach(function (user) {
+        if (user != _this.client.nick) {
+            _this.client.send('MODE', _this.options.channel, '-ohv', user, user, user);
+        }
+    });
 };
 
 Bot.prototype.onGameAssignedRoles = function onGameAssignedRoles () {
@@ -521,6 +574,7 @@ Bot.prototype.onGameSide = function onGameSide (player, side) {
 
         /* Wolves Side */
         case Game.SIDE_LOVERS: {
+            return;
             var otherlover = this.game.lovers.filter(function (lover) { return lover != player; })[0];
 
             this.client.notice(player, sprintf('%1$s:\x0f\x0306 You are one of \x02the lovers\x02', player));
@@ -530,6 +584,24 @@ Bot.prototype.onGameSide = function onGameSide (player, side) {
         } break;
     }
 };
+
+
+Bot.prototype.onGameStartTurnThief = function onGameStartTurnThief () {
+    var _this = this;
+
+    this.game.getRolePlayers(Game.ROLE_THIEF).forEach(function (thief) {
+        _this.client.notice(thief, sprintf('%1$s:\x0f You can choose to become one of the unassigned roles:', thief));
+        _this.game.thiefRoles.forEach(function (role) {
+            _this.client.notice(thief, sprintf('%1$s: - \x0f Write \x1f/msg %4$s !steal %2$s\x1f to become a \x02%3$s\x02', thief, role, role, _this.client.nick));
+        });
+        _this.client.notice(thief, sprintf('%1$s:\x0f You have \x02%2$s\x02 seconds to steal a role', thief, Game.TIME_THIEF));
+    });
+};
+
+Bot.prototype.onGameEndTurnThief = function onGameEndTurnThief () {
+
+};
+
 
 
 Bot.prototype.onGameStartTurnWolves = function onGameStartTurnWolves () {
@@ -608,6 +680,23 @@ Bot.prototype.onGameEndTurnSeer = function onGameEndTurnSeer () {
 };
 
 
+Bot.prototype.onGameStartTurnKid = function onGameStartTurnKid () {
+    var _this = this;
+
+    this.game.getRolePlayers(Game.ROLE_KID).forEach(function (kid) {
+        _this.client.notice(kid, sprintf('You wake up and go outside; if anything happens, you\'ll see it'));
+    });
+};
+
+Bot.prototype.onGameEndTurnKid = function onGameEndTurnKid () {
+    var _this = this;
+
+    this.game.getRolePlayers(Game.ROLE_KID).forEach(function (kid) {
+        _this.client.notice(kid, 'You go back to sleep');
+    });
+};
+
+
 /* === WITCH === */
 
 Bot.prototype.onGameStartTurnWitch = function onGameStartTurnWitch () {
@@ -640,18 +729,6 @@ Bot.prototype.onGameEndTurnWitch = function onGameEndTurnWitch () {
     this.game.getRolePlayers(Game.ROLE_WITCH).forEach(function (witch) {
         _this.client.notice(witch, sprintf('Fearing the werewolves might discover you, you go back to sleep'));
     });
-};
-
-Bot.prototype.onGameLifePot = function (witch, target) {
-    if (target) {
-        this.client.say(witch, sprintf('You\'ve used a \x0303life potion\x0300 on \x02%1$s\x02', target));
-    }
-};
-
-Bot.prototype.onGameDeathPot = function (witch, target) {
-    if (target) {
-        this.client.say(witch, sprintf('You\'ve used a \x0305death potion\x0300 on \x02%1$s\x02', target));
-    }
 };
 
 
@@ -762,11 +839,52 @@ Bot.prototype.onGameVote = function onGameVote (player, target) {
     });
 };
 
-
 Bot.prototype.onGameSee = function onGameSee (player, target, role) {
     var _this = this;
 
     this.client.notice(player, sprintf('%s: The player \x02%s\x02 is a \x02\x1f%s\x1f\x02', player, target, role));
+};
+
+
+Bot.prototype.onGamePeekEvent = function onGamePeekEvent (event, args) {
+    var _this = this;
+
+    this.game.getRolePlayers(Game.ROLE_KID).forEach(function (kid) {
+        switch (event) {
+            case 'attack': {
+                _this.client.notice(kid, sprintf('%1$s: \x0fYou see \x02%2$s\x02, the \x0305\x02werewolf\x0f, planning to attack \x02%3$s\x02 tonight', kid, args[0], args[1]));
+            } break;
+
+            case 'see': {
+                _this.client.notice(kid, sprintf('%1$s: \x0fYou see \x02%2$s\x02, the \x0301\x02seer\x0f, revealing the true identity of \x02%3$s\x02', kid, args[0], args[1]));
+            } break;
+
+            case 'lifepot': {
+                _this.client.notice(kid, sprintf('%1$s: \x0fYou see \x02%2$s\x02, the \x0306\x02witch\x0f, using a \x0303life potion\x0f on \x02%3$s\x02', kid, args[0], args[1]));
+            } break;
+
+            case 'deathpot': {
+                _this.client.notice(kid, sprintf('%1$s: \x0fYou see \x02%2$s\x02, the \x0306\x02witch\x0f, using a \x0305death potion\x0f on \x02%3$s\x02', kid, args[0], args[1]));
+            } break;
+
+            default: {
+                _this.client.notice(kid, sprintf('Unknown event: \x02%s\x02 [%s]', event, args.join(', ')));
+            }
+        }
+    });
 }
+
+
+Bot.prototype.onGameLifePot = function (witch, target) {
+    if (target) {
+        this.client.say(witch, sprintf('You\'ve used a \x0303life potion\x0300 on \x02%1$s\x02', target));
+    }
+};
+
+Bot.prototype.onGameDeathPot = function (witch, target) {
+    if (target) {
+        this.client.say(witch, sprintf('You\'ve used a \x0305death potion\x0300 on \x02%1$s\x02', target));
+    }
+};
 
 module.exports = Bot;
