@@ -308,19 +308,37 @@ Game.prototype.checkVictory = function checkVictory () {
         return true;
     }
 
-    logger.silly('Players: %s;  Wolves: %s', this.players.length, this.countRolePlayers(Game.ROLE_WOLF));
+    var _this = this;
 
-    /* Check if victory is possible */
+    /* Make the lovers lose if they're dead */
+    var loversDead = this.getSidePlayers(Game.SIDE_LOVERS).some(function (lover) {
+        return _this.alivePlayers.indexOf(lover) < 0;
+    });
+    if (loversDead && this.losingSides.indexOf(Game.SIDE_LOVERS) < 0) {
+        this.losingSides.push(Game.SIDE_LOVERS);
+    }
+
+    /* If nobody is alive, "nobody" wins (literally) */
     if (this.players.length == 0) {
         this.winningSide = Game.SIDE_NOBODY;
         return true;
+    }
 
-    } else if (this.countRolePlayers(Game.ROLE_WOLF) == 0) {
+    /* The town wins if they're the only ones alive */
+    if (this.countRolePlayers(Game.SIDE_TOWN) == this.players.length) {
         this.winningSide = Game.SIDE_TOWN;
         return true;
+    }
 
-    } else if (this.countRolePlayers(Game.ROLE_WOLF) == this.players.length) {
+    /* The werewolves win if they're the only ones alive */
+    if (this.countRolePlayers(Game.SIDE_WOLVES) == this.players.length) {
         this.winningSide = Game.SIDE_WOLVES;
+        return true;
+    }
+
+    /* The lovers win if they're the only ones alive */
+    if (this.countRolePlayers(Game.SIDE_LOVERS) == this.players.length) {
+        this.winningSide = Game.SIDE_LOVERS;
         return true;
     }
 
@@ -329,8 +347,31 @@ Game.prototype.checkVictory = function checkVictory () {
 };
 
 Game.prototype.performVictory = function performVictory () {
+    var _this = this;
+
     if (this.checkVictory()) {
         logger.debug('Winning side: ' + this.winningSide);
+
+        var winners = {};
+
+        /* Anyone on the winning side wins */
+        this.getSidePlayers(this.winningSide).forEach(function (winner) {
+            winners[winner] = true;
+        });
+
+        /* Anyone on a loding side loses */
+        this.losingSides.forEach(function (losingSide) {
+            _this.getSidePlayers(losingSide).forEach(function (loser) {
+                winners[loser] = false;
+            });
+        });
+
+        /* Emit everything! */
+        _this._emit('side-victory', this.winningSide, true);
+        this.initialPlayers.forEach(function (player) {
+            _this._emit('player-victory', player, winners[player]);
+        });
+
         return this.endGame();
     }
 
@@ -381,11 +422,13 @@ Game.prototype.startGame = function startGame () {
 
     this.townName = utils.generateTownName();
     this.winningSide = null;
+    this.losingSides = [];
     this.assignedRoles = false;
 
     this.deaths = [];
     this.players = [];
     this.alivePlayers = [];
+    this.initialPlayers = [];
 
     this.wolves = [];
 
@@ -461,10 +504,11 @@ Game.prototype.endTurn = function endTurn (turn, when) {
     this.turnEndTimes[turn] = now + (when || 0) * 1000;
 };
 
-/* TODO REMOVE */ if (config.testing) { var forceRole = Game.ROLE_THIEF; }
+
 Game.prototype.assignRoles = function assignRoles () {
     var _this = this;
 
+    this.initialPlayers = this.players.slice(0);
     this.assignedRoles = true;
 
     this.existingRoles = [];
@@ -492,7 +536,7 @@ Game.prototype.assignRoles = function assignRoles () {
     for (var i = 0; i < Game.ROLEPLAYERS.length && roles.length < numRoles; i++) {
         var rolespec = Game.ROLEPLAYERS[i];
 
-        var probability = (config.testing) ? 0.25 : 0.00;
+        var probability = Game.__FORCED_ROLE ? 1.00 : ((config.testing) ? 0.25 : 0.00);
 
         /* Find out the probabilidy */
         rolespec.chances.forEach(function (chance) {
@@ -501,7 +545,6 @@ Game.prototype.assignRoles = function assignRoles () {
             }
         });
 
-        /* TODO REMOVE */if (forceRole && forceRole == rolespec.role) { probability = 1; }
         logger.silly('Probability of %s: %d', rolespec.role, probability);
 
         /* If the role gets randomly selected */
@@ -523,7 +566,16 @@ Game.prototype.assignRoles = function assignRoles () {
     /* Shuffle the players and the roles */
     var randPlayers = _.shuffle(this.players);
     var randRoles   = _.shuffle(roles);
-    /* TODO REMOVE */ if (forceRole) { randRoles.splice(randRoles.indexOf(forceRole), 1); randRoles.unshift(forceRole); }
+
+    if (Game.__FORCED_ROLE) {
+        if (this.players.indexOf(this.gameStarter) >= 0) {
+            randPlayers.splice(randPlayers.indexOf(this.gameStarter), 1);
+            randPlayers.unshift(this.gameStarter);
+        }
+
+        randRoles.splice(randRoles.indexOf(Game.__FORCED_ROLE), 1);
+        randRoles.unshift(Game.__FORCED_ROLE);
+    }
 
     logger.silly('Players: ', randPlayers.join(', '));
     logger.silly('Roles: ', randRoles.join(', '));
@@ -953,6 +1005,8 @@ Game.prototype.play = function play (name) {
 
     this.startGame();
 
+    this.gameStarter = name;
+
     this.players.push(name);
     this.alivePlayers.push(name);
     this._emit('join', name, this.alivePlayers.length);
@@ -975,6 +1029,7 @@ Game.prototype.join = function join (name) {
 
     this.players.push(name);
     this.alivePlayers.push(name);
+
     this._emit('join', name, this.alivePlayers.length);
 };
 
@@ -1015,7 +1070,7 @@ Game.prototype.attack = function attack (name, victimName) {
         throw new GameError('player_not_playing');
     }
 
-    if (this.wolves.indexOf(player) >= 0) {
+    if (this.wolves.indexOf(player) < 0) {
         throw new GameError('attack_not_a_wolf');
     }
 
@@ -1029,7 +1084,7 @@ Game.prototype.attack = function attack (name, victimName) {
         throw new GameError('attack_victim_not_playing');
     }
 
-    if (this.getPlayerRole(victim) == Game.ROLE_WOLF) {
+    if (this.wolves.indexOf(victim) >= 0) {
         throw new GameError('attack_victim_wolf');
     }
 

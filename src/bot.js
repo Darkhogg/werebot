@@ -118,6 +118,9 @@ Bot.prototype.start = function start (version) {
     this.game.on('start-game', this.onGameStartGame, this);
     this.game.on(  'end-game', this.onGameEndGame, this);
 
+    this.game.on('player-victory', this.onGamePlayerVictory, this);
+    this.game.on('side-victory', this.onGameSideVictory, this);
+
 
     this.game.on('start-phase:' + Game.PHASE_PREPARATION, this.onGameStartPhasePreparation, this);
     this.game.on(  'end-phase:' + Game.PHASE_PREPARATION, this.onGameEndPhasePreparation, this);
@@ -439,33 +442,42 @@ Bot.prototype.onGameStartGame = function onGameStartGame () {
 };
 
 Bot.prototype.onGameEndGame = function onGameEndGame () {
-    if (this.game.assignedRoles) {
-        this.client.say(this.options.channel, 'The game has ended');
-
-        switch (this.game.winningSide) {
-            case Game.SIDE_TOWN: {
-                this.client.say(this.options.channel,
-                    '\x0303The \x02town of ' + this.game.townName + '\x02 has won by killing all werewolves!');
-            } break;
-
-            case Game.SIDE_WOLVES: {
-                this.client.say(this.options.channel,
-                    '\x0304The \x02werewolves\x02 have won by killing all humans!');
-            } break;
-
-            case Game.SIDE_NOBODY: {
-                this.client.say(this.options.channel,
-                    '\x0314\x02Nobody\x02 has won the game');
-            }
-        }
-
-    } else {
+    if (!this.game.assignedRoles) {
         this.client.say(this.options.channel,
             sprintf('A minimum of \x02%s\x02 players are required to start a game', Game.MIN_PLAYERS)
         );
     }
 
     this.resetChannel();
+};
+
+
+Bot.prototype.onGameSideVictory = function onGameSideVictory (side, result) {
+    switch (side) {
+        case Game.SIDE_TOWN: {
+            this.client.say(this.options.channel,
+                sprintf('\x0303The \x02town of %1$s\x02 has won!', this.game.townName));
+        } break;
+
+        case Game.SIDE_WOLVES: {
+            this.client.say(this.options.channel,
+                '\x0305The \x02werewolves\x02 have won!');
+        } break;
+
+        case Game.SIDE_NOBODY: {
+            this.client.say(this.options.channel,
+                '\x0314\x02Nobody\x02 has won the game');
+        }
+    }
+};
+
+Bot.prototype.onGamePlayerVictory = function onGamePlayerVictory (player, result) {
+    if (result) {
+        this.client.notice(player, sprintf('%1$s:\x0f\x0303 You have \x02won\x0f!', player));
+
+    } else {
+        this.client.notice(player, sprintf('%1$s:\x0f\x0304 You have \x02lost\x0f!', player));
+    }
 };
 
 
@@ -550,7 +562,10 @@ Bot.prototype.onGameAssignedRoles = function onGameAssignedRoles () {
 
     /* Inform everyone of the roles of the town */
     this.client.say(this.options.channel,
-        'The town of \x02' + this.game.townName + '\x02 has \x02' + this.game.alivePlayers.length + '\x02 inhabitants');
+        sprintf('The town of \x02%1$s\x02 has \x02%2$s\x02 inhabitants', this.game.townName, this.game.alivePlayers.length));
+
+    this.client.say(this.options.channel,
+        sprintf('There are \x0305\x02%1$s\x02 werewolves\x0f in the town', this.game.wolves.length));
 };
 
 Bot.prototype.onGameRole = function onGameRole (player, role) {
@@ -638,11 +653,7 @@ Bot.prototype.onGameStartTurnDiscussion = function onGameStartTurnDiscussion () 
         }
     });
 
-    var numWolves =  this.game.getRolePlayers(Game.ROLE_WOLF).length;
-
     this.client.say(this.options.channel, 'Everyone on ' + this.game.townName + ' gathers at the plaza');
-    this.client.say(this.options.channel,
-        '\x0305\x02' + numWolves + ' werewolve' + (numWolves > 1 ? 's\x02 are ' : '\x02 is ') + 'still alive\x0f');
     this.client.say(this.options.channel, 'It\'s time to find out who is a werewolf: discuss!');
 }
 
