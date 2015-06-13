@@ -354,19 +354,19 @@ Game.prototype.checkVictory = function checkVictory () {
 Game.prototype.performVictory = function performVictory () {
     var _this = this;
 
-    if (this.checkVictory()) {
+    if (!this.performedVictory && this.checkVictory()) {
         logger.debug('Winning side: ' + this.winningSide);
 
         var winners = {};
 
         /* Anyone on the winning side wins */
-        this.getSidePlayers(this.winningSide).forEach(function (winner) {
+        _this.allSidePlayers[this.winningSide].forEach(function (winner) {
             winners[winner] = true;
         });
 
         /* Anyone on a loding side loses */
         this.losingSides.forEach(function (losingSide) {
-            _this.getSidePlayers(losingSide).forEach(function (loser) {
+            _this.allSidePlayers[losingSide].forEach(function (loser) {
                 winners[loser] = false;
             });
         });
@@ -377,6 +377,7 @@ Game.prototype.performVictory = function performVictory () {
             _this._emit('player-victory', player, winners[player]);
         });
 
+        this.performedVictory = true;
         return this.endGame();
     }
 
@@ -429,6 +430,7 @@ Game.prototype.startGame = function startGame () {
     this.winningSide = null;
     this.losingSides = [];
     this.assignedRoles = false;
+    this.performedVictory = false;
 
     this.deaths = [];
     this.players = [];
@@ -443,6 +445,7 @@ Game.prototype.startGame = function startGame () {
 
     this.sides = {};
     this.sidePlayers = {};
+    this.allSidePlayers = {};
     this.existingSides = [];
 
     this.thiefRoles = [];
@@ -522,6 +525,7 @@ Game.prototype.assignRoles = function assignRoles () {
 
     this.existingSides = [];
     this.sidePlayers = {};
+    this.allSidePlayers = {};
     this.sides = {};
 
     /* Start defining the number of roles */
@@ -541,7 +545,7 @@ Game.prototype.assignRoles = function assignRoles () {
     for (var i = 0; i < Game.ROLEPLAYERS.length && roles.length < numRoles; i++) {
         var rolespec = Game.ROLEPLAYERS[i];
 
-        var probability = Game.__FORCED_ROLE ? 1.00 : ((config.testing) ? 0.25 : 0.00);
+        var probability = Game.__FORCED_ROLE ? 1.00 : 0.00;
 
         /* Find out the probabilidy */
         rolespec.chances.forEach(function (chance) {
@@ -653,8 +657,10 @@ Game.prototype.addPlayerToSide = function addPlayerToSide (player, side) {
     /* Add the player to the side list */
     if (!this.sidePlayers[side]) {
         this.sidePlayers[side] = [];
+        this.allSidePlayers[side] = [];
     }
     this.sidePlayers[side].push(player);
+    this.allSidePlayers[side].push(player);
 
     /* Set the player side (as a list -- there can be multiple sides!) */
     if (!this.sides[player]) {
