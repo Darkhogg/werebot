@@ -389,7 +389,7 @@ Bot.prototype.onCommand = function onCommand (who, where, command, args) {
             /* Make two people fall in love */
             case 'love': {
                 this.game.love(who, args[0], args[1]);
-            }
+            } break;
 
             /* Use the seer ability */
             case 'see': {
@@ -596,11 +596,11 @@ Bot.prototype.onGameSide = function onGameSide (player, side) {
 
         /* Wolves Side */
         case Game.SIDE_LOVERS: {
-            return;
-            var otherlover = this.game.lovers.filter(function (lover) { return lover != player; })[0];
+            var otherLovers = this.game.getSidePlayers(Game.SIDE_LOVERS).filter(function (lover) {
+                return lover != player;
+            });
 
-            this.client.notice(player, sprintf('%1$s:\x0f\x0306 You are one of \x02the lovers\x02', player));
-            this.client.notice(player, sprintf('%1$s:\x0f\x0306 You are in love with \x02%2$s\x02', player, otherLover));
+            this.client.notice(player, sprintf('%1$s:\x0f\x0306 You are \x02in love\x02 with \x02%2$s\x02', player, utils.join(otherLovers, '\x02, \x02', '\x02 and \x02')));
             this.client.notice(player, sprintf('%1$s:\x0f\x0306 If any of you two die, the other will immediately commit suicide', player));
             this.client.notice(player, sprintf('%1$s:\x0f\x0306 In order to win, you need to be alive at the end of the game', player));
         } break;
@@ -629,7 +629,7 @@ Bot.prototype.onGameStartTurnCupid = function onGameStartTurnCupid () {
     var _this = this;
 
     this.game.getRolePlayers(Game.ROLE_CUPID).forEach(function (cupid) {
-        _this.client.notice(cupid, sprintf('%1$s:\x0f Write \x1f/msg %2$s \x1dnick1\x1d \x1dnick2\x1d\x1f to make \x1dnick1\x1d and \x1dnick2\x1d fall in love', cupid, _this.client.nick));
+        _this.client.notice(cupid, sprintf('%1$s:\x0f Write \x1f/msg %2$s !love \x1dnick1\x1d \x1dnick2\x1d\x1f to make \x1dnick1\x1d and \x1dnick2\x1d fall in love', cupid, _this.client.nick));
         _this.client.notice(cupid, sprintf('%1$s:\x0f You have \x02%2$s\x02 seconds to make two people fall in love', cupid, Game.TIME_CUPID));
     });
 };

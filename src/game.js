@@ -516,7 +516,7 @@ Game.prototype.endTurn = function endTurn (turn, when) {
     this.turnEndTimes[turn] = now + (when || 0) * 1000;
 };
 
-
+Game.__FORCED_ROLE = Game.ROLE_CUPID;
 Game.prototype.assignRoles = function assignRoles () {
     var _this = this;
 
@@ -549,7 +549,7 @@ Game.prototype.assignRoles = function assignRoles () {
     for (var i = 0; i < Game.ROLEPLAYERS.length && roles.length < numRoles; i++) {
         var rolespec = Game.ROLEPLAYERS[i];
 
-        var probability = Game.__FORCED_ROLE ? 1.00 : 0.00;
+        var probability = (Game.__FORCED_ROLE == rolespec.role) ? 1.00 : 0.00;
 
         /* Find out the probabilidy */
         rolespec.chances.forEach(function (chance) {
@@ -999,9 +999,12 @@ Game.prototype.onEndTurnHunter = function onEndTurnHunter () {
 
 
 Game.prototype.onDeath = function onDeath (player) {
-    var role = this.getPlayerRole(player);
+    var _this = this;
 
-    if (this.getPlayerSides(player).indexOf(Game.SIDE_LOVERS)) {
+    var role = this.getPlayerRole(player);
+    var sides = this.getPlayerSides(player);
+
+    if (sides.indexOf(Game.SIDE_LOVERS)) {
         this.getSidePlayers(Game.SIDE_LOVERS).forEach(function (lover) {
             _this.addDeath(lover, Game.DEATH_SUICIDE);
         });
@@ -1148,7 +1151,7 @@ Game.prototype.love = function love (name, target1Name, target2Name) {
     logger.verbose('LOVE("%s")', name, target1, target2);
 
     this.selectedLovers = [target1, target2].filter(function (target) {
-        return target;
+        return target != Game.BLANK;
     });
 
     this.endTurn(Game.TURN_CUPID);
