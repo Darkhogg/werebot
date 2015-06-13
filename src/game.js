@@ -40,6 +40,9 @@ var Game = function Game () {
     this.on('start-turn:' + Game.TURN_THIEF, this.onStartTurnThief, this);
     this.on(  'end-turn:' + Game.TURN_THIEF, this.onEndTurnThief, this);
 
+    this.on('start-turn:' + Game.TURN_CUPID, this.onStartTurnCupid, this);
+    this.on(  'end-turn:' + Game.TURN_CUPID, this.onEndTurnCupid, this);
+
     this.on('start-turn:' + Game.TURN_WOLVES, this.onStartTurnWolves, this);
     this.on(  'end-turn:' + Game.TURN_WOLVES, this.onEndTurnWolves, this);
 
@@ -178,6 +181,7 @@ Game.DEATH_LYNCH      = 'lynch';
 Game.DEATH_DISAPPEAR  = 'disappear';
 Game.DEATH_WITCH      = 'witch';
 Game.DEATH_HUNTER     = 'hunter';
+Game.DEATH_SUICIDE    = 'suicide';
 
 /* === GAME SIDES === */
 Game.SIDE_NOBODY    = 'nobody';
@@ -302,25 +306,48 @@ Game.prototype.getSidePlayers = function getSidePlayers (role) {
     return this.sidePlayers[role];
 };
 
+Game.prototype.countSidePlayers = function countSidePlayers (role) {
+    return this.getSidePlayers(role).length;
+};
+
+
 Game.prototype.checkVictory = function checkVictory () {
     /* Victory already set */
     if (this.winningSide) {
         return true;
     }
 
-    logger.silly('Players: %s;  Wolves: %s', this.players.length, this.countRolePlayers(Game.ROLE_WOLF));
+    var _this = this;
 
-    /* Check if victory is possible */
+    /* Make the lovers lose if they're dead */
+    var loversDead = this.getSidePlayers(Game.SIDE_LOVERS).some(function (lover) {
+        return _this.alivePlayers.indexOf(lover) < 0;
+    });
+    if (loversDead && this.losingSides.indexOf(Game.SIDE_LOVERS) < 0) {
+        this.losingSides.push(Game.SIDE_LOVERS);
+    }
+
+    /* If nobody is alive, "nobody" wins (literally) */
     if (this.players.length == 0) {
         this.winningSide = Game.SIDE_NOBODY;
         return true;
+    }
 
-    } else if (this.countRolePlayers(Game.ROLE_WOLF) == 0) {
+    /* The town wins if they're the only ones alive */
+    if (this.countSidePlayers(Game.SIDE_TOWN) == this.players.length) {
         this.winningSide = Game.SIDE_TOWN;
         return true;
+    }
 
-    } else if (this.countRolePlayers(Game.ROLE_WOLF) == this.players.length) {
+    /* The werewolves win if they're the only ones alive */
+    if (this.countSidePlayers(Game.SIDE_WOLVES) == this.players.length) {
         this.winningSide = Game.SIDE_WOLVES;
+        return true;
+    }
+
+    /* The lovers win if they're the only ones alive */
+    if (this.countSidePlayers(Game.SIDE_LOVERS) == this.players.length) {
+        this.winningSide = Game.SIDE_LOVERS;
         return true;
     }
 
@@ -329,8 +356,32 @@ Game.prototype.checkVictory = function checkVictory () {
 };
 
 Game.prototype.performVictory = function performVictory () {
-    if (this.checkVictory()) {
+    var _this = this;
+
+    if (!this.performedVictory && this.checkVictory()) {
         logger.debug('Winning side: ' + this.winningSide);
+
+        var winners = {};
+
+        /* Anyone on the winning side wins */
+        _this.allSidePlayers[this.winningSide].forEach(function (winner) {
+            winners[winner] = true;
+        });
+
+        /* Anyone on a loding side loses */
+        this.losingSides.forEach(function (losingSide) {
+            _this.allSidePlayers[losingSide].forEach(function (loser) {
+                winners[loser] = false;
+            });
+        });
+
+        /* Emit everything! */
+        _this._emit('side-victory', this.winningSide, true);
+        this.initialPlayers.forEach(function (player) {
+            _this._emit('player-victory', player, winners[player]);
+        });
+
+        this.performedVictory = true;
         return this.endGame();
     }
 
@@ -381,11 +432,14 @@ Game.prototype.startGame = function startGame () {
 
     this.townName = utils.generateTownName();
     this.winningSide = null;
+    this.losingSides = [];
     this.assignedRoles = false;
+    this.performedVictory = false;
 
     this.deaths = [];
     this.players = [];
     this.alivePlayers = [];
+    this.initialPlayers = [];
 
     this.wolves = [];
 
@@ -395,6 +449,7 @@ Game.prototype.startGame = function startGame () {
 
     this.sides = {};
     this.sidePlayers = {};
+    this.allSidePlayers = {};
     this.existingSides = [];
 
     this.thiefRoles = [];
@@ -461,10 +516,11 @@ Game.prototype.endTurn = function endTurn (turn, when) {
     this.turnEndTimes[turn] = now + (when || 0) * 1000;
 };
 
-/* TODO REMOVE */ if (config.testing) { var forceRole = Game.ROLE_THIEF; }
+Game.__FORCED_ROLE = Game.ROLE_CUPID;
 Game.prototype.assignRoles = function assignRoles () {
     var _this = this;
 
+    this.initialPlayers = this.players.slice(0);
     this.assignedRoles = true;
 
     this.existingRoles = [];
@@ -473,6 +529,7 @@ Game.prototype.assignRoles = function assignRoles () {
 
     this.existingSides = [];
     this.sidePlayers = {};
+    this.allSidePlayers = {};
     this.sides = {};
 
     /* Start defining the number of roles */
@@ -492,7 +549,7 @@ Game.prototype.assignRoles = function assignRoles () {
     for (var i = 0; i < Game.ROLEPLAYERS.length && roles.length < numRoles; i++) {
         var rolespec = Game.ROLEPLAYERS[i];
 
-        var probability = (config.testing) ? 0.25 : 0.00;
+        var probability = (Game.__FORCED_ROLE == rolespec.role) ? 1.00 : 0.00;
 
         /* Find out the probabilidy */
         rolespec.chances.forEach(function (chance) {
@@ -501,7 +558,6 @@ Game.prototype.assignRoles = function assignRoles () {
             }
         });
 
-        /* TODO REMOVE */if (forceRole && forceRole == rolespec.role) { probability = 1; }
         logger.silly('Probability of %s: %d', rolespec.role, probability);
 
         /* If the role gets randomly selected */
@@ -523,7 +579,16 @@ Game.prototype.assignRoles = function assignRoles () {
     /* Shuffle the players and the roles */
     var randPlayers = _.shuffle(this.players);
     var randRoles   = _.shuffle(roles);
-    /* TODO REMOVE */ if (forceRole) { randRoles.splice(randRoles.indexOf(forceRole), 1); randRoles.unshift(forceRole); }
+
+    if (Game.__FORCED_ROLE) {
+        if (this.players.indexOf(this.gameStarter) >= 0) {
+            randPlayers.splice(randPlayers.indexOf(this.gameStarter), 1);
+            randPlayers.unshift(this.gameStarter);
+        }
+
+        randRoles.splice(randRoles.indexOf(Game.__FORCED_ROLE), 1);
+        randRoles.unshift(Game.__FORCED_ROLE);
+    }
 
     logger.silly('Players: ', randPlayers.join(', '));
     logger.silly('Roles: ', randRoles.join(', '));
@@ -596,8 +661,10 @@ Game.prototype.addPlayerToSide = function addPlayerToSide (player, side) {
     /* Add the player to the side list */
     if (!this.sidePlayers[side]) {
         this.sidePlayers[side] = [];
+        this.allSidePlayers[side] = [];
     }
     this.sidePlayers[side].push(player);
+    this.allSidePlayers[side].push(player);
 
     /* Set the player side (as a list -- there can be multiple sides!) */
     if (!this.sides[player]) {
@@ -786,13 +853,14 @@ Game.prototype.onStartTurnInfo = function onStartTurnInfo () {
 Game.prototype.onEndTurnInfo = function onEndTurnInfo () {
     var thiefTime = (this.getRolePlayers(Game.ROLE_THIEF) > 0)
         ? Game.TIME_THIEF
-        : utils.randomRange(Game.TIME_THIEF / 3, Game.TIME_THIEF * 2 / 3);
+        : utils.randomRange(Game.TIME_THIEF / 5, Game.TIME_THIEF * 3 / 5);
 
     this.startTurn(Game.TURN_THIEF, thiefTime);
 };
 
 
 Game.prototype.onStartTurnThief = function onStartTurnThief () {
+    this.thiefSelect = null;
 };
 
 Game.prototype.onEndTurnThief = function onEndTurnThief () {
@@ -803,7 +871,7 @@ Game.prototype.onEndTurnThief = function onEndTurnThief () {
         });
 
         if (this.thiefRoles.length > 0 && allWolves && !this.thiefSelect) {
-            this.thiefSelect = _.shuffle(this.thiefRoles)[0];
+            this.thiefSelect = _.sample(this.thiefRoles);
         }
 
         if (this.thiefSelect) {
@@ -813,7 +881,39 @@ Game.prototype.onEndTurnThief = function onEndTurnThief () {
             this.addPlayerToSide(this.getRolePlayers(Game.ROLE_THIEF)[0], Game.SIDE_TOWN);
         }
     }
+
+    /* Start the cupid turn */
+    var cupidTime = (this.getRolePlayers(Game.ROLE_CUPID) > 0)
+        ? Game.TIME_CUPID
+        : utils.randomRange(Game.TIME_CUPID / 5, Game.TIME_CUPID * 3 / 5);
+
+    this.startTurn(Game.TURN_CUPID, cupidTime);
 };
+
+
+
+Game.prototype.onStartTurnCupid = function onStartTurnCupid () {
+    this.selectedLovers = [];
+};
+
+Game.prototype.onEndTurnCupid = function onEndTurnCupid () {
+    var _this = this;
+
+    if (this.countRolePlayers(Game.ROLE_CUPID) > 0) {
+        while (this.selectedLovers.length < 2) {
+            var candidates = this.players.filter(function (player) {
+                return _this.selectedLovers.indexOf(player) < 0;
+            });
+
+            this.selectedLovers.push(_.sample(candidates));
+        }
+
+        this.selectedLovers.forEach(function (lover) {
+            _this.addPlayerToSide(lover, Game.SIDE_LOVERS);
+        });
+    }
+};
+
 
 
 Game.prototype.onStartTurnWolves = function onStartTurnWolves () {
@@ -834,7 +934,7 @@ Game.prototype.onEndTurnWolves = function onEndTurnWolves () {
     }
 
     if (victims.length > 0) {
-        this.wolvesVictim = _.shuffle(victims)[0];
+        this.wolvesVictim = _.sample(victims);
 
         this._emit('wolves-victim', this.wolvesVictim);
         this.addDeath(this.wolvesVictim, Game.DEATH_WOLVES);
@@ -899,7 +999,16 @@ Game.prototype.onEndTurnHunter = function onEndTurnHunter () {
 
 
 Game.prototype.onDeath = function onDeath (player) {
+    var _this = this;
+
     var role = this.getPlayerRole(player);
+    var sides = this.getPlayerSides(player);
+
+    if (sides.indexOf(Game.SIDE_LOVERS)) {
+        this.getSidePlayers(Game.SIDE_LOVERS).forEach(function (lover) {
+            _this.addDeath(lover, Game.DEATH_SUICIDE, true);
+        });
+    }
 
     if (role == Game.ROLE_HUNTER) {
         /* The hunter is not finished yet: A hunter turn starts, the hunter
@@ -953,6 +1062,8 @@ Game.prototype.play = function play (name) {
 
     this.startGame();
 
+    this.gameStarter = name;
+
     this.players.push(name);
     this.alivePlayers.push(name);
     this._emit('join', name, this.alivePlayers.length);
@@ -975,6 +1086,7 @@ Game.prototype.join = function join (name) {
 
     this.players.push(name);
     this.alivePlayers.push(name);
+
     this._emit('join', name, this.alivePlayers.length);
 };
 
@@ -1008,6 +1120,43 @@ Game.prototype.steal = function steal (name, role) {
     this.endTurn(Game.TURN_THIEF);
 };
 
+Game.prototype.love = function love (name, target1Name, target2Name) {
+    var player = this.findPlayer(name);
+
+    if (!player) {
+        throw new GameError('player_not_playing');
+    }
+
+    if (this.getPlayerRole(player) != Game.ROLE_CUPID) {
+        throw new GameError('love_not_cupid');
+    }
+
+    if (!this.isTurn(Game.TURN_CUPID)) {
+        throw new GameError('love_not_in_turn');
+    }
+
+    var target1 = target1Name;
+    var target2 = target2Name;
+
+    if (!target1 && target1Name != BLANK) {
+        throw new GameError('love_target1_not_playing');
+    }
+
+    if (!target2 && target2Name != BLANK) {
+        throw new GameError('love_target2_not_playing');
+    }
+
+    /* --- Everything OK --- */
+
+    logger.verbose('LOVE("%s")', name, target1, target2);
+
+    this.selectedLovers = [target1, target2].filter(function (target) {
+        return target != Game.BLANK;
+    });
+
+    this.endTurn(Game.TURN_CUPID);
+};
+
 Game.prototype.attack = function attack (name, victimName) {
     var player = this.findPlayer(name);
 
@@ -1015,7 +1164,7 @@ Game.prototype.attack = function attack (name, victimName) {
         throw new GameError('player_not_playing');
     }
 
-    if (this.wolves.indexOf(player) >= 0) {
+    if (this.wolves.indexOf(player) < 0) {
         throw new GameError('attack_not_a_wolf');
     }
 
@@ -1029,7 +1178,7 @@ Game.prototype.attack = function attack (name, victimName) {
         throw new GameError('attack_victim_not_playing');
     }
 
-    if (this.getPlayerRole(victim) == Game.ROLE_WOLF) {
+    if (this.wolves.indexOf(victim) >= 0) {
         throw new GameError('attack_victim_wolf');
     }
 
