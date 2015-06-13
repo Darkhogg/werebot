@@ -516,7 +516,6 @@ Game.prototype.endTurn = function endTurn (turn, when) {
     this.turnEndTimes[turn] = now + (when || 0) * 1000;
 };
 
-Game.__FORCED_ROLE = Game.ROLE_CUPID;
 Game.prototype.assignRoles = function assignRoles () {
     var _this = this;
 
