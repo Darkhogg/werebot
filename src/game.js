@@ -40,6 +40,9 @@ var Game = function Game () {
     this.on('start-turn:' + Game.TURN_THIEF, this.onStartTurnThief, this);
     this.on(  'end-turn:' + Game.TURN_THIEF, this.onEndTurnThief, this);
 
+    this.on('start-turn:' + Game.TURN_CUPID, this.onStartTurnCupid, this);
+    this.on(  'end-turn:' + Game.TURN_CUPID, this.onEndTurnCupid, this);
+
     this.on('start-turn:' + Game.TURN_WOLVES, this.onStartTurnWolves, this);
     this.on(  'end-turn:' + Game.TURN_WOLVES, this.onEndTurnWolves, this);
 
@@ -178,6 +181,7 @@ Game.DEATH_LYNCH      = 'lynch';
 Game.DEATH_DISAPPEAR  = 'disappear';
 Game.DEATH_WITCH      = 'witch';
 Game.DEATH_HUNTER     = 'hunter';
+Game.DEATH_SUICIDE    = 'suicide';
 
 /* === GAME SIDES === */
 Game.SIDE_NOBODY    = 'nobody';
@@ -849,13 +853,14 @@ Game.prototype.onStartTurnInfo = function onStartTurnInfo () {
 Game.prototype.onEndTurnInfo = function onEndTurnInfo () {
     var thiefTime = (this.getRolePlayers(Game.ROLE_THIEF) > 0)
         ? Game.TIME_THIEF
-        : utils.randomRange(Game.TIME_THIEF / 3, Game.TIME_THIEF * 2 / 3);
+        : utils.randomRange(Game.TIME_THIEF / 5, Game.TIME_THIEF * 3 / 5);
 
     this.startTurn(Game.TURN_THIEF, thiefTime);
 };
 
 
 Game.prototype.onStartTurnThief = function onStartTurnThief () {
+    this.thiefSelect = null;
 };
 
 Game.prototype.onEndTurnThief = function onEndTurnThief () {
@@ -866,7 +871,7 @@ Game.prototype.onEndTurnThief = function onEndTurnThief () {
         });
 
         if (this.thiefRoles.length > 0 && allWolves && !this.thiefSelect) {
-            this.thiefSelect = _.shuffle(this.thiefRoles)[0];
+            this.thiefSelect = _.sample(this.thiefRoles);
         }
 
         if (this.thiefSelect) {
@@ -876,7 +881,39 @@ Game.prototype.onEndTurnThief = function onEndTurnThief () {
             this.addPlayerToSide(this.getRolePlayers(Game.ROLE_THIEF)[0], Game.SIDE_TOWN);
         }
     }
+
+    /* Start the cupid turn */
+    var cupidTime = (this.getRolePlayers(Game.ROLE_CUPID) > 0)
+        ? Game.TIME_CUPID
+        : utils.randomRange(Game.TIME_CUPID / 5, Game.TIME_CUPID * 3 / 5);
+
+    this.startTurn(Game.TURN_CUPID, cupidTime);
 };
+
+
+
+Game.prototype.onStartTurnCupid = function onStartTurnCupid () {
+    this.selectedLovers = [];
+};
+
+Game.prototype.onEndTurnCupid = function onEndTurnCupid () {
+    var _this = this;
+
+    if (this.countRolePlayers(Game.ROLE_CUPID) > 0) {
+        while (this.selectedLovers.length < 2) {
+            var candidates = this.players.filter(function (player) {
+                return _this.selectedLovers.indexOf(player) < 0;
+            });
+
+            this.selectedLovers.push(_.sample(candidates));
+        }
+
+        this.selectedLovers.forEach(function (lover) {
+            _this.addPlayerToSide(lover, Game.SIDE_LOVERS);
+        });
+    }
+};
+
 
 
 Game.prototype.onStartTurnWolves = function onStartTurnWolves () {
@@ -897,7 +934,7 @@ Game.prototype.onEndTurnWolves = function onEndTurnWolves () {
     }
 
     if (victims.length > 0) {
-        this.wolvesVictim = _.shuffle(victims)[0];
+        this.wolvesVictim = _.sample(victims);
 
         this._emit('wolves-victim', this.wolvesVictim);
         this.addDeath(this.wolvesVictim, Game.DEATH_WOLVES);
@@ -963,6 +1000,12 @@ Game.prototype.onEndTurnHunter = function onEndTurnHunter () {
 
 Game.prototype.onDeath = function onDeath (player) {
     var role = this.getPlayerRole(player);
+
+    if (this.getPlayerSides(player).indexOf(Game.SIDE_LOVERS)) {
+        this.getSidePlayers(Game.SIDE_LOVERS).forEach(function (lover) {
+            _this.addDeath(lover, Game.DEATH_SUICIDE);
+        });
+    }
 
     if (role == Game.ROLE_HUNTER) {
         /* The hunter is not finished yet: A hunter turn starts, the hunter
@@ -1072,6 +1115,43 @@ Game.prototype.steal = function steal (name, role) {
     }
 
     this.endTurn(Game.TURN_THIEF);
+};
+
+Game.prototype.love = function love (name, target1Name, target2Name) {
+    var player = this.findPlayer(name);
+
+    if (!player) {
+        throw new GameError('player_not_playing');
+    }
+
+    if (this.getPlayerRole(player) != Game.ROLE_CUPID) {
+        throw new GameError('love_not_cupid');
+    }
+
+    if (!this.isTurn(Game.TURN_CUPID)) {
+        throw new GameError('love_not_in_turn');
+    }
+
+    var target1 = target1Name;
+    var target2 = target2Name;
+
+    if (!target1 && target1Name != BLANK) {
+        throw new GameError('love_target1_not_playing');
+    }
+
+    if (!target2 && target2Name != BLANK) {
+        throw new GameError('love_target2_not_playing');
+    }
+
+    /* --- Everything OK --- */
+
+    logger.verbose('LOVE("%s")', name, target1, target2);
+
+    this.selectedLovers = [target1, target2].filter(function (target) {
+        return target;
+    });
+
+    this.endTurn(Game.TURN_CUPID);
 };
 
 Game.prototype.attack = function attack (name, victimName) {

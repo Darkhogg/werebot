@@ -138,6 +138,8 @@ Bot.prototype.start = function start (version) {
     this.game.on('start-turn:' + Game.TURN_THIEF, this.onGameStartTurnThief, this);
     this.game.on(  'end-turn:' + Game.TURN_THIEF, this.onGameEndTurnThief, this);
 
+    this.game.on('start-turn:' + Game.TURN_CUPID, this.onGameStartTurnCupid, this);
+    this.game.on(  'end-turn:' + Game.TURN_CUPID, this.onGameEndTurnCupid, this);
 
     this.game.on('start-turn:' + Game.TURN_WOLVES, this.onGameStartTurnWolves, this);
     this.game.on(  'end-turn:' + Game.TURN_WOLVES, this.onGameEndTurnWolves, this);
@@ -379,10 +381,15 @@ Bot.prototype.onCommand = function onCommand (who, where, command, args) {
                 this.game.lynch(who, args[0]);
             } break;
 
-            /* Vote for lynching */
+            /* Steal a character (thief) */
             case 'steal': {
                 this.game.steal(who, args[0]);
             } break;
+
+            /* Make two people fall in love */
+            case 'love': {
+                this.game.love(who, args[0], args[1]);
+            }
 
             /* Use the seer ability */
             case 'see': {
@@ -618,6 +625,24 @@ Bot.prototype.onGameEndTurnThief = function onGameEndTurnThief () {
 };
 
 
+Bot.prototype.onGameStartTurnCupid = function onGameStartTurnCupid () {
+    var _this = this;
+
+    this.game.getRolePlayers(Game.ROLE_CUPID).forEach(function (cupid) {
+        _this.client.notice(cupid, sprintf('%1$s:\x0f Write \x1f/msg %2$s \x1dnick1\x1d \x1dnick2\x1d\x1f to make \x1dnick1\x1d and \x1dnick2\x1d fall in love', cupid, _this.client.nick));
+        _this.client.notice(cupid, sprintf('%1$s:\x0f You have \x02%2$s\x02 seconds to make two people fall in love', cupid, Game.TIME_CUPID));
+    });
+};
+
+Bot.prototype.onGameEndTurnCupid = function onGameEndTurnCupid () {
+    var _this = this;
+
+    this.game.getRolePlayers(Game.ROLE_CUPID).forEach(function (cupid) {
+        _this.client.notice(cupid, sprintf('%1$s:\x0f The lovers for the rest of the game are \x02%2$s\x02', cupid, utils.join(_this.game.getSidePlayers(Game.SIDE_LOVERS), '\x02, \x02', '\x02 and \x02')));
+    });
+};
+
+
 
 Bot.prototype.onGameStartTurnWolves = function onGameStartTurnWolves () {
     var _this = this;
@@ -751,40 +776,25 @@ Bot.prototype.onGameStartTurnHunter = function onGameStartTurnHunter () {
 };
 
 Bot.prototype.onGameEndTurnHunter = function onGameEndTurnHunter () {
-    
+
 };
 
 
 Bot.prototype.onGameDeath = function (player, role, reason) {
-    var prefix = ((role == Game.ROLE_WOLF) ? '\x0303' : '\x0304')
-        + '\x02' + player + '\x02, the \x02' + role + '\x02, ';
-
     this.client.send('MODE', this.options.channel, '-v', player);
 
     switch (reason) {
         case Game.DEATH_DISAPPEAR: {
-            this.client.say(this.options.channel,
-                prefix + 'has gone missing');
+            this.client.say(this.options.channel, sprintf('\x02%1$s\x02, the \x02%2$s, has gone missing', player, role));
         } break;
 
-        case Game.DEATH_WOLVES: {
-            this.client.say(this.options.channel,
-                prefix + 'has been found dead, killed by the werewolves!');
-        } break;
-
-        case Game.DEATH_LYNCH: {
-            this.client.say(this.options.channel,
-                prefix + 'has been lynched by the town');
-        } break;
-
+        case Game.DEATH_WOLVES:
         case Game.DEATH_WITCH: {
-            this.client.say(this.options.channel,
-                prefix + 'has been found dead, poisoned by the witch!');
+            this.client.say(this.options.channel, sprintf('\x02%1$s\x02, the \x02%2$s, has been found dead', player, role));
         } break;
 
         default: {
-            this.client.say(this.options.channel,
-                prefix + 'has died (' + reason + ')');
+            this.client.say(this.options.channel, sprintf('\x02%1$s\x02, the \x02%2$s, has died', player, role));
         }
     }
 };
