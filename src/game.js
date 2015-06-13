@@ -1006,7 +1006,7 @@ Game.prototype.onDeath = function onDeath (player) {
 
     if (sides.indexOf(Game.SIDE_LOVERS)) {
         this.getSidePlayers(Game.SIDE_LOVERS).forEach(function (lover) {
-            _this.addDeath(lover, Game.DEATH_SUICIDE);
+            _this.addDeath(lover, Game.DEATH_SUICIDE, true);
         });
     }
 

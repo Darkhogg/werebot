@@ -489,7 +489,8 @@ Bot.prototype.onGamePlayerVictory = function onGamePlayerVictory (player, result
 
 
 Bot.prototype.onGameStartPhasePreparation = function onGameStartPhasePreparation () {
-
+    this.client.say(this.options.channel, '\x02\x0307/!\\\x0f \x0315Remember that the game is in \x02beta\x02 stage ');
+    this.client.say(this.options.channel, '\x0308/!\\\x0f \x0315Please report any problems, suggestions to\x0302 https://github.com/Darkhogg/werebot/issues');
 };
 
 Bot.prototype.onGameEndPhasePreparation = function onGameEndPhasePreparation () {
@@ -785,16 +786,16 @@ Bot.prototype.onGameDeath = function (player, role, reason) {
 
     switch (reason) {
         case Game.DEATH_DISAPPEAR: {
-            this.client.say(this.options.channel, sprintf('\x02%1$s\x02, the \x02%2$s, has gone missing', player, role));
+            this.client.say(this.options.channel, sprintf('\x02%1$s\x02, the \x02%2$s\x02, has gone missing', player, role));
         } break;
 
         case Game.DEATH_WOLVES:
         case Game.DEATH_WITCH: {
-            this.client.say(this.options.channel, sprintf('\x02%1$s\x02, the \x02%2$s, has been found dead', player, role));
+            this.client.say(this.options.channel, sprintf('\x02%1$s\x02, the \x02%2$s\x02, has been found dead', player, role));
         } break;
 
         default: {
-            this.client.say(this.options.channel, sprintf('\x02%1$s\x02, the \x02%2$s, has died', player, role));
+            this.client.say(this.options.channel, sprintf('\x02%1$s\x02, the \x02%2$s\x02, has died', player, role));
         }
     }
 };
