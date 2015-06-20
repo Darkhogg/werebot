@@ -1,0 +1,9 @@
+baseurl: ""
+
+defaults:
+  - scope:
+      path: "" # an empty string here means all files in the project
+    values:
+      layout: "page"
+
+exclude: ['node_modules', 'local.json', '.env']

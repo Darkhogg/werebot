@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>{% if page.title %}{{ page.title }}{% else %}{{ site.title }}{% endif %}</title>
+
+    <link rel="stylesheet" href="{{ site.baseurl }}/foghorn.css">
+  </head>
+
+  <body>
+    {{ content }}
+  </body>
+</html>
