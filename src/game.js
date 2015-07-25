@@ -1242,7 +1242,7 @@ Game.prototype.lynch = function (name, targetName) {
     this.lynchTotalVotes ++;
 
     /* Create a vote entry if not present (and not blank) */
-    if (target && !this.attackVictims[target]) {
+    if (target && !this.lynchVictims[target]) {
         this.lynchVictims[target] = 0;
     }
 
