@@ -1,9 +1,12 @@
-baseurl: ""
+title: Werebot
+baseurl: "/werebot"
+
+permalink: pretty
 
 defaults:
   - scope:
       path: "" # an empty string here means all files in the project
     values:
-      layout: "page"
+      layout: page
 
 exclude: ['node_modules', 'local.json', '.env']
