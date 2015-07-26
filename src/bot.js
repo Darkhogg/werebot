@@ -451,7 +451,7 @@ Bot.prototype.onGameStartGame = function onGameStartGame () {
 Bot.prototype.onGameEndGame = function onGameEndGame () {
     if (!this.game.assignedRoles) {
         this.client.say(this.options.channel,
-            sprintf('A minimum of \x02%s\x02 players are required to start a game', Game.MIN_PLAYERS)
+            sprintf('At least \x02%s\x02 players are required to start a game', Game.MIN_PLAYERS)
         );
     }
 
@@ -899,13 +899,13 @@ Bot.prototype.onGamePeekEvent = function onGamePeekEvent (event, args) {
 
 Bot.prototype.onGameLifePot = function (witch, target) {
     if (target) {
-        this.client.say(witch, sprintf('You\'ve used a \x0303life potion\x0300 on \x02%1$s\x02', target));
+        this.client.notice(witch, sprintf('You\'ve used a \x0303life potion\x0300 on \x02%1$s\x02', target));
     }
 };
 
 Bot.prototype.onGameDeathPot = function (witch, target) {
     if (target) {
-        this.client.say(witch, sprintf('You\'ve used a \x0305death potion\x0300 on \x02%1$s\x02', target));
+        this.client.notice(witch, sprintf('You\'ve used a \x0305death potion\x0300 on \x02%1$s\x02', target));
     }
 };
 

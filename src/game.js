@@ -358,7 +358,7 @@ Game.prototype.checkVictory = function checkVictory () {
 Game.prototype.performVictory = function performVictory () {
     var _this = this;
 
-    if (!this.performedVictory && this.checkVictory()) {
+    if (!this.performedVictory || this.checkVictory()) {
         logger.debug('Winning side: ' + this.winningSide);
 
         var winners = {};
@@ -368,7 +368,7 @@ Game.prototype.performVictory = function performVictory () {
             winners[winner] = true;
         });
 
-        /* Anyone on a loding side loses */
+        /* Anyone on a losing side loses */
         this.losingSides.forEach(function (losingSide) {
             _this.allSidePlayers[losingSide].forEach(function (loser) {
                 winners[loser] = false;
